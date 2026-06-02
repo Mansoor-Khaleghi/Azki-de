@@ -16,18 +16,24 @@ any `FAIL`, ready to drop into Airflow/CI.
 |---|---|---|
 | ClickHouse falls behind the topic | Kafka **consumer lag** per partition (`kafka-consumer-groups`, Kafka-UI, or `system.kafka_consumers`) | Alert when lag > threshold for N minutes; scale `kafka_num_consumers`. |
 | Stale warehouse | **Freshness check**: `now() - max(_ingested_at)` (check #6) | Page if freshness SLA (e.g. 5 min) is breached. |
+| Pipeline latency | **Ingestion-lag check** (check #10): `p95`/`max` of `ingest_lag_sec` (produce→consume, from persisted `kafka_timestamp`) | Alert when p95 lag exceeds SLA. |
 | Late-arriving orders vs purchase events | Compare `fact_purchases` count vs purchase events (check #7) | Periodic reconciliation MV / batch backfill for the gap. |
 
 ## 2. Missing events
 
+- **Offset-continuity** (check #9): every enriched row persists its Kafka
+  `partition`/`offset`; per partition `max(offset) - min(offset) + 1` must equal
+  the distinct-offset count. Any shortfall is an *exact* count of dropped
+  messages — a far stronger signal than row totals, and it pinpoints which
+  offset ranges to replay.
 - **Row-count parity** (check #1): ClickHouse count vs the source/producer
   count (the producer logs `delivered`; reconcile against `events_enriched`).
 - **Referential integrity** (check #2): events whose `user_id` doesn't resolve
   in `users_dict` land as `city='UNKNOWN'` — counted and alerted.
 - **Volume anomaly detection**: events-per-hour vs the trailing 7-day baseline;
   a sudden drop signals an upstream outage or a dropped partition.
-- **Gap detection**: per-day event counts; a missing/under-filled day triggers
-  the Spark backfill ([`spark/backfill_job.py`](../spark/backfill_job.py)).
+- **Gap detection**: the offset ranges above (or per-day counts) trigger the
+  Spark backfill ([`spark/backfill_job.py`](../spark/backfill_job.py)).
 
 ## 3. Schema drift
 

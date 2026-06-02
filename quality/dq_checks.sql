@@ -72,3 +72,26 @@ SELECT 'kafka_consumer_errors' AS check_name,
        concat('assignments=', toString(count())) AS metric
 FROM system.kafka_consumers
 WHERE database = 'azki';
+
+-- 9) MISSING EVENTS via OFFSET CONTINUITY — Kafka offsets are contiguous per
+--    partition, so for each partition (max-min+1) must equal the distinct
+--    offset count. Any shortfall = a gap = dropped/missing events. This is a
+--    far stronger missing-data signal than a raw row count.
+SELECT 'offset_continuity' AS check_name,
+       if(sum(expected) = sum(actual), 'PASS', 'FAIL') AS status,
+       concat('missing_in_offset_ranges=', toString(sum(expected) - sum(actual))) AS metric
+FROM (
+    SELECT kafka_partition,
+           max(kafka_offset) - min(kafka_offset) + 1 AS expected,
+           uniqExact(kafka_offset)                   AS actual
+    FROM azki.events_enriched
+    GROUP BY kafka_partition
+);
+
+-- 10) INGESTION LAG (sync/delay) — produce->consume latency per row. Alerts if
+--     the pipeline falls behind. Threshold here is generous (replay scenario).
+SELECT 'ingestion_lag' AS check_name,
+       if(quantile(0.95)(ingest_lag_sec) < 600, 'PASS', 'WARN') AS status,
+       concat('p95_lag_sec=', toString(round(quantile(0.95)(ingest_lag_sec))),
+              ' max_lag_sec=', toString(max(ingest_lag_sec))) AS metric
+FROM azki.events_enriched;

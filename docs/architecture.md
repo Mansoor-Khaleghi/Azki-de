@@ -62,6 +62,8 @@ flowchart LR
 | **`events_agg_daily`** | Pre-aggregated metrics | count/sum/avg at dashboard speed |
 | **`fact_purchases`** | Denormalized purchases | Part 2: events + order details, one wide row |
 | **denorm reconcile** | Idempotent gap-filler | Closes late-arriving-order gaps the INNER-JOIN MV can't backfill |
+| **Kafka lineage columns** | `topic/partition/offset/timestamp` + `ingest_lag_sec` on each row | Exact offset-gap (missing-events) detection + per-row latency |
+| **Prefect flows** | ingest / monitoring / backfill orchestration | Scheduling + retries; DQ gate fails the run; wraps existing scripts |
 | **Kafka Connect** | Debezium source + CH sink | Bonus: production-grade CDC + sink path |
 
 ## Why ClickHouse-native join (vs Spark / ksqlDB)

@@ -102,6 +102,13 @@ error-stream→DLQ, DDL hashing), and **load monitoring** (`system.*` tables →
 Prometheus/Grafana). The executable gate (`run_quality_checks.py` over
 `dq_checks.sql`) exits non-zero on failure for CI/Airflow.
 
+**Kafka lineage for precise checks.** Every enriched row persists its
+`kafka_topic/partition/offset/timestamp` and a materialized `ingest_lag_sec`.
+This powers two strong signals beyond a raw row count: an **offset-continuity**
+check (per-partition `max-min+1 == distinct offsets` — any shortfall is a real
+gap of *missing events*), and an **ingestion-lag** check (`p95`/`max` of
+produce→consume latency for sync/delay).
+
 A real finding surfaced by the data: **`premium_amount` is populated on
 non-purchase events**, which is semantically wrong — flagged as a `WARN` check
 and the kind of issue that opens a data-contract ticket.
@@ -111,6 +118,14 @@ and the kind of issue that opens a data-contract ticket.
 against users (broadcast join), de-duplicates on the natural key, and loads
 ClickHouse **idempotently** (ReplacingMergeTree + optional partition-scoped
 `ALTER … DELETE` for hard restatements).
+
+### Orchestration (Prefect)
+[`orchestration/flows.py`](../orchestration/flows.py) wraps the pipeline as
+Prefect flows — `ingest` (produce → wait → reconcile → DQ), `monitoring`
+(reconcile + DQ on a 5-minute schedule), and `backfill` — with per-task
+**retries** and a DQ gate that fails the run on any `FAIL`. Tasks shell out to
+the canonical scripts/SQL, so there is no duplicated logic. It runs locally with
+zero infra (`python flows.py monitoring`) and deploys to a server+worker in prod.
 
 ## 5. Verified results (actual local run)
 
@@ -122,11 +137,15 @@ The pipeline was run end-to-end on the provided dataset:
 | Enrichment coverage (users matched) | 20,000 / 20,000 (0 `UNKNOWN`) |
 | Distinct users seen in events | 4,916 |
 | Purchase events → `fact_purchases` rows | 4,892 → 4,892 (across 4 product lines) |
-| DQ gate | 7 PASS, 1 WARN, 0 FAIL |
+| DQ gate | 9 PASS, 1 WARN, 0 FAIL |
+| Offset continuity | 0 gaps (offsets 0–19,999) |
+| Ingestion lag | p95 6s, max 6s |
 
-The single WARN is the genuine data issue: **15,108 non-purchase events carry a
+Verified by a **clean clone + from-zero `make demo`** (not just in-place). The
+single WARN is the genuine data issue: **15,108 non-purchase events carry a
 `premium_amount`**. Both the projection (`force_optimize_projection=1` succeeds)
-and the bloom-filter skip indexes were confirmed active.
+and the bloom-filter skip indexes were confirmed active, and the Prefect
+`monitoring` flow ran the reconcile + gate to completion.
 
 ## 6. Trade-offs & what I'd do next in production
 
@@ -137,5 +156,7 @@ and the bloom-filter skip indexes were confirmed active.
   is at-least-once into ClickHouse — dedup via `ReplacingMergeTree`/natural keys.
 - **Schema:** move from JSON to Avro/Protobuf under Schema Registry for stronger
   contracts once producers are owned by other teams.
-- **Orchestration:** wrap schema deploys, the DQ gate, and backfills in Airflow;
-  ship metrics to Grafana with alerting on lag/freshness/parts.
+- **Orchestration:** Prefect flows already schedule the DQ gate + reconciliation
+  and run the ingest/backfill cycles; next would be deploying them to a
+  server+worker, adding schema-deploy flows, and shipping metrics to Grafana
+  with alerting on lag/freshness/parts.

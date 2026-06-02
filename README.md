@@ -64,6 +64,14 @@ docker compose --profile spark run --rm spark \
   /opt/app/backfill_job.py --start 2025-10-01 --end 2025-10-07
 ```
 
+Orchestration (Prefect — schedules + retries; run on the host):
+
+```bash
+pip install -r orchestration/requirements.txt
+python orchestration/flows.py monitoring     # reconcile + DQ gate, once
+python orchestration/flows.py serve           # DQ + reconcile every 5 min
+```
+
 ## Repository layout
 
 | Path | What |
@@ -72,11 +80,12 @@ docker compose --profile spark run --rm spark \
 | `ingestion/producer/` | Python Kafka producer |
 | `ingestion/mysql/` | MySQL schema + CSV load + CDC grants |
 | `ingestion/generate_orders.py` | Synthetic order generator (Part 2) |
-| `clickhouse/part1/` | Dictionary, Kafka source, enrichment MV, aggregates |
-| `clickhouse/part2/` | Order tables, denormalized MV, optimizations, governance |
+| `clickhouse/part1/` | Dictionary, Kafka source, enrichment MV (+ Kafka lineage), aggregates |
+| `clickhouse/part2/` | Order tables, denormalized MV, reconciliation, optimizations, governance |
 | `connect/` | Debezium source + ClickHouse sink configs (bonus) |
-| `quality/` | DQ plan, SQL checks, runner |
+| `quality/` | DQ plan, SQL checks (incl. offset-continuity + ingestion-lag), runner |
 | `spark/` | PySpark idempotent backfill |
+| `orchestration/` | Prefect flows (ingest / monitoring / backfill) with retries + scheduling |
 | `docs/` | Architecture diagram + technical report |
 
 ## Service endpoints

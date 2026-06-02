@@ -20,8 +20,17 @@ CREATE TABLE IF NOT EXISTS azki.events_enriched
     city           LowCardinality(String),
     device_type    LowCardinality(String),
     signup_date    Date,
-    -- lineage / observability:
-    _ingested_at   DateTime DEFAULT now()
+    -- Kafka lineage (from the engine's virtual columns) — enables exact
+    -- offset-gap detection (missing-events DQ) and end-to-end replay:
+    kafka_topic     LowCardinality(String),
+    kafka_partition UInt64,
+    kafka_offset    UInt64,
+    kafka_timestamp DateTime,
+    -- observability:
+    _ingested_at    DateTime DEFAULT now(),
+    -- per-row pipeline latency (produce -> consume), in seconds. MATERIALIZED
+    -- so it is computed once at insert and costs nothing to read.
+    ingest_lag_sec  Int32 MATERIALIZED dateDiff('second', kafka_timestamp, now())
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(event_time)
@@ -41,6 +50,11 @@ SELECT
     premium_amount,
     dictGetOrDefault('azki.users_dict', 'city',        toUInt64(user_id), 'UNKNOWN') AS city,
     dictGetOrDefault('azki.users_dict', 'device_type', toUInt64(user_id), 'UNKNOWN') AS device_type,
-    dictGetOrDefault('azki.users_dict', 'signup_date', toUInt64(user_id), toDate('1970-01-01')) AS signup_date
+    dictGetOrDefault('azki.users_dict', 'signup_date', toUInt64(user_id), toDate('1970-01-01')) AS signup_date,
+    -- Kafka engine virtual columns -> persisted lineage:
+    _topic     AS kafka_topic,
+    _partition AS kafka_partition,
+    _offset    AS kafka_offset,
+    _timestamp AS kafka_timestamp
 FROM azki.kafka_user_events
 WHERE length(_error) = 0;   -- drop messages that failed to parse

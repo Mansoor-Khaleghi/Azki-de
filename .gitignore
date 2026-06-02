@@ -9,6 +9,10 @@ __pycache__/
 .venv/
 venv/
 
+# Prefect (orchestration) local state
+.prefect/
+prefect.db*
+
 # misc
 *.log
 .DS_Store
