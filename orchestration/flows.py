@@ -16,15 +16,22 @@ Run standalone (no server needed):
 Schedule (needs a Prefect server/worker — see docker-compose `prefect` profile):
     python orchestration/flows.py serve           # DQ every 5 min
 """
+import os
 import subprocess
 import sys
 import time
+import urllib.request
 
 from prefect import flow, task, get_run_logger
 
-# ── repo paths / connection (overridable via env in a real deployment) ──
-CH = ["docker", "exec", "-i", "azki-clickhouse", "clickhouse-client",
-      "--user", "azki", "--password", "azkipw"]
+# ── connection config (env-driven so the same flows run host-side OR inside
+#    the compose `prefect` container). Host defaults -> localhost; the
+#    container sets CH_HOST=clickhouse, KAFKA_BOOTSTRAP=kafka:9092. ──
+CH_HOST = os.environ.get("CH_HOST", "localhost")
+CH_PORT = os.environ.get("CH_PORT", "8123")
+CH_USER = os.environ.get("CH_USER", "azki")
+CH_PASS = os.environ.get("CH_PASSWORD", "azkipw")
+KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:29092")
 PYTHON = sys.executable
 
 
@@ -32,12 +39,21 @@ def _run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
+def ch_query(sql: str) -> str:
+    """Run a ClickHouse query over HTTP (no docker exec — works anywhere)."""
+    req = urllib.request.Request(
+        f"http://{CH_HOST}:{CH_PORT}/", data=sql.encode(),
+        headers={"X-ClickHouse-User": CH_USER, "X-ClickHouse-Key": CH_PASS})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read().decode().strip()
+
+
 @task(retries=3, retry_delay_seconds=10)
 def produce_events(limit: int = 0):
     """Stream user_events.csv into Kafka (retried on transient broker errors)."""
     log = get_run_logger()
     cmd = [PYTHON, "ingestion/producer/produce_events.py",
-           "--bootstrap", "localhost:29092", "--topic", "user_events",
+           "--bootstrap", KAFKA_BOOTSTRAP, "--topic", "user_events",
            "--file", "data/user_events.csv"]
     if limit:
         cmd += ["--limit", str(limit)]
@@ -53,9 +69,9 @@ def wait_for_consumption(expected: int = 20000, timeout_s: int = 120):
     """Block until ClickHouse has consumed `expected` rows (or timeout)."""
     log = get_run_logger()
     deadline = time.monotonic() + timeout_s
+    n = 0
     while time.monotonic() < deadline:
-        r = _run(CH + ["--query", "SELECT count() FROM azki.events_enriched"])
-        n = int(r.stdout.strip() or 0)
+        n = int(ch_query("SELECT count() FROM azki.events_enriched") or 0)
         if n >= expected:
             log.info(f"consumed {n} rows")
             return n
@@ -69,10 +85,8 @@ def reconcile_denorm():
     log = get_run_logger()
     with open("clickhouse/part2/14-denorm-reconcile.sql") as f:
         sql = f.read()
-    r = _run(CH + ["--multiquery"], input=sql)
-    if r.returncode != 0:
-        raise RuntimeError(f"reconcile failed: {r.stderr[-500:]}")
-    n = _run(CH + ["--query", "SELECT count() FROM azki.fact_purchases"]).stdout.strip()
+    ch_query(sql)
+    n = ch_query("SELECT count() FROM azki.fact_purchases")
     log.info(f"fact_purchases now {n}")
     return n
 
@@ -81,7 +95,8 @@ def reconcile_denorm():
 def run_dq_gate(expected: int = 20000):
     """Run the data-quality gate; FAIL (non-zero exit) aborts the flow."""
     log = get_run_logger()
-    r = _run([PYTHON, "quality/run_quality_checks.py", "--expected", str(expected)])
+    r = _run([PYTHON, "quality/run_quality_checks.py", "--expected", str(expected),
+              "--host", CH_HOST, "--port", CH_PORT])
     log.info("\n" + r.stdout)
     if r.returncode != 0:
         raise RuntimeError("DATA QUALITY GATE FAILED")

@@ -33,6 +33,10 @@ up: check-data  ## Start core stack (kafka, mysql, clickhouse)
 up-bonus:  ## Start the full stack incl. Schema Registry, Connect, Kafka-UI
 	docker compose up -d
 
+orchestrate:  ## Start Prefect (server + UI + scheduled monitoring flow) at :4200
+	docker compose --profile orchestration up -d prefect
+	@echo "Prefect UI -> http://localhost:4200 (serving azki-monitoring every 5 min)"
+
 down:  ## Stop containers (keep volumes)
 	docker compose down
 

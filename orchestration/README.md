@@ -6,10 +6,15 @@ schedulable, retrying flows. Tasks shell out to the canonical scripts/SQL
 `validate_backfill.py`) — **no logic is duplicated**, so the orchestrator and
 the Makefile stay in sync.
 
-Run it on the **host / control plane** (it drives the stack via `docker exec`
-and `localhost:29092`), not inside a container — avoids the docker-in-docker
-anti-pattern. In production the same flows deploy to a Prefect worker that has
-network access to the cluster.
+The flows are **connection-agnostic** (ClickHouse over HTTP, Kafka bootstrap —
+both env-driven via `CH_HOST` / `KAFKA_BOOTSTRAP`), so the exact same code runs
+two ways:
+
+- **In compose** (default, zero local setup): `make orchestrate` starts the
+  `prefect` service — server + UI + the scheduled `monitoring` flow — talking to
+  the stack over the compose network. UI at http://localhost:4200.
+- **On the host** (dev): `pip install -r orchestration/requirements.txt` then
+  `python orchestration/flows.py ...` against `localhost`.
 
 ## Flows
 
@@ -25,21 +30,29 @@ Resilience: `produce_events` retries 3× (transient broker errors),
 
 ## Run
 
+**In compose (recommended):**
+
+```bash
+make orchestrate          # docker compose --profile orchestration up -d prefect
+# -> Prefect server + UI at http://localhost:4200, serving the scheduled
+#    azki-monitoring flow (reconcile + DQ every 5 min).
+
+# trigger a run on demand inside the container:
+docker exec azki-prefect python orchestration/flows.py monitoring
+```
+
+**On the host (dev):**
+
 ```bash
 pip install -r orchestration/requirements.txt   # prefect>=3
-
-# run a flow once, locally (no server required):
 python orchestration/flows.py monitoring                 # reconcile + DQ
 python orchestration/flows.py ingest                     # full cycle
 python orchestration/flows.py backfill 2025-10-01 2025-10-07
-
-# scheduled: DQ + reconcile every 5 minutes (self-hosted, ephemeral server):
-python orchestration/flows.py serve
+python orchestration/flows.py serve                      # scheduled, every 5 min
 ```
 
 `serve` registers a scheduled deployment and runs it on an interval — open the
-Prefect UI (`prefect server start`, default http://localhost:4200) to watch
-runs, retries, and logs.
+Prefect UI (http://localhost:4200) to watch runs, retries, and logs.
 
 ## Why Prefect (vs cron / Airflow)
 

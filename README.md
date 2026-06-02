@@ -64,13 +64,13 @@ docker compose --profile spark run --rm spark \
   /opt/app/backfill_job.py --start 2025-10-01 --end 2025-10-07
 ```
 
-Orchestration (Prefect — schedules + retries; run on the host):
+Orchestration (Prefect — schedules + retries; **in compose**):
 
 ```bash
-pip install -r orchestration/requirements.txt
-python orchestration/flows.py monitoring     # reconcile + DQ gate, once
-python orchestration/flows.py serve           # DQ + reconcile every 5 min
-prefect server start                          # UI at http://localhost:4200
+make orchestrate     # server + UI + scheduled monitoring flow at :4200
+docker exec azki-prefect python orchestration/flows.py monitoring  # run now
+# (or host-side for dev: pip install -r orchestration/requirements.txt
+#  && python orchestration/flows.py monitoring)
 ```
 
 ## Orchestration in action (Prefect UI)
@@ -115,6 +115,13 @@ showing `fact_purchases now 4892` and the DQ check output):
 | Kafka Connect | http://localhost:8083 |
 | Kafka-UI | http://localhost:8080 |
 | MySQL | localhost:3306 |
+| Prefect UI | http://localhost:4200 (`make orchestrate`) |
 
 Each part maps to: **Part 1** → `clickhouse/part1/` + `ingestion/` + `connect/`;
-**Part 2** → `clickhouse/part2/`; **Part 3** → `quality/` + `spark/`.
+**Part 2** → `clickhouse/part2/`; **Part 3** → `quality/` + `spark/` +
+`orchestration/`.
+
+> **Runs from scratch.** `make demo` brings up the core stack and runs the full
+> pipeline; `make orchestrate` adds the Prefect server/UI + scheduled flow — both
+> entirely via `docker compose`. The only host dependency is the producer's
+> `confluent-kafka` (for `make produce`); everything else is containerized.

@@ -124,8 +124,11 @@ ClickHouse **idempotently** (ReplacingMergeTree + optional partition-scoped
 Prefect flows — `ingest` (produce → wait → reconcile → DQ), `monitoring`
 (reconcile + DQ on a 5-minute schedule), and `backfill` — with per-task
 **retries** and a DQ gate that fails the run on any `FAIL`. Tasks shell out to
-the canonical scripts/SQL, so there is no duplicated logic. It runs locally with
-zero infra (`python flows.py monitoring`) and deploys to a server+worker in prod.
+the canonical scripts/SQL, so there is no duplicated logic. The flows are
+connection-agnostic (`CH_HOST`/`KAFKA_BOOTSTRAP` env), so the **same code runs
+in compose** (`make orchestrate` → server + UI + scheduled flow on the compose
+network) or on the host for dev. The whole project therefore comes up from
+scratch via `docker compose` alone.
 
 ## 5. Verified results (actual local run)
 
