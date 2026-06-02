@@ -5,14 +5,23 @@ SHELL := /bin/bash
 PYTHON ?= python3   # override with: make PYTHON=.venv/bin/python ...
 CH := docker exec -i azki-clickhouse clickhouse-client --user azki --password azkipw
 
-.PHONY: help up up-bonus down clean logs \
+.PHONY: help check-data up up-bonus down clean logs \
         ch-init seed-orders produce verify dq backfill demo
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-up:  ## Start core stack (kafka, mysql, clickhouse)
+check-data:  ## Fail fast if the (git-ignored) dataset is missing
+	@for f in data/users.csv data/user_events.csv; do \
+	  if [ ! -f "$$f" ]; then \
+	    echo "ERROR: missing $$f — place the confidential dataset in data/ (see data/README.md)"; \
+	    exit 1; \
+	  fi; \
+	done
+	@echo "dataset present."
+
+up: check-data  ## Start core stack (kafka, mysql, clickhouse)
 	docker compose up -d kafka mysql clickhouse
 	@echo "Waiting for ClickHouse to be ready..."
 	@for i in $$(seq 1 30); do \

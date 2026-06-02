@@ -24,10 +24,14 @@ user_events.csv ─► Python producer ─► Kafka ─► ClickHouse Kafka engi
 ## Quick start
 
 ```bash
-# 0. put users.csv + user_events.csv in ./data/, then:
+# 0. drop the confidential dataset into the existing ./data/ dir:
+#      data/users.csv   data/user_events.csv   (see data/README.md)
+# 1. install the producer dependency (a virtualenv is recommended):
 pip install -r ingestion/producer/requirements.txt
+#    if your `python` isn't the one with the dep, pass it to make, e.g.:
+#      make PYTHON=.venv/bin/python demo
 
-make up          # start kafka + mysql + clickhouse
+make up          # start kafka + mysql + clickhouse (fails fast if data missing)
 make ch-init     # create dictionary, Kafka source, MVs, tables
 make seed-orders # generate + load synthetic order tables (Part 2)
 make produce     # stream events into Kafka
