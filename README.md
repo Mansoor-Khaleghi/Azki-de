@@ -70,7 +70,24 @@ Orchestration (Prefect — schedules + retries; run on the host):
 pip install -r orchestration/requirements.txt
 python orchestration/flows.py monitoring     # reconcile + DQ gate, once
 python orchestration/flows.py serve           # DQ + reconcile every 5 min
+prefect server start                          # UI at http://localhost:4200
 ```
+
+## Orchestration in action (Prefect UI)
+
+The `azki-monitoring` flow (reconcile → DQ gate) running on a schedule —
+3 completed runs, 6 task runs, 0 failures:
+
+![Prefect dashboard](docs/img/prefect-dashboard.png)
+
+Flow-run list — each run green with its two tasks:
+
+![Prefect flow runs](docs/img/prefect-flow-runs.png)
+
+A single run's task timeline + live logs (`reconcile_denorm` → `run_dq_gate`,
+showing `fact_purchases now 4892` and the DQ check output):
+
+![Prefect flow run detail](docs/img/prefect-flow-run.png)
 
 ## Repository layout
 
