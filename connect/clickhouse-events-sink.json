@@ -1,0 +1,29 @@
+{
+  "name": "clickhouse-events-sink",
+  "config": {
+    "connector.class": "com.clickhouse.kafka.connect.ClickHouseSinkConnector",
+    "tasks.max": "1",
+
+    "topics": "user_events",
+
+    "hostname": "clickhouse",
+    "port": "8123",
+    "database": "azki",
+    "username": "azki",
+    "password": "azkipw",
+    "ssl": "false",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "user_events.dlq",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+
+    "exactlyOnce": "true",
+
+    "_comment": "Alternative to the ClickHouse Kafka table engine: a Connect-managed sink writing the user_events topic into a target table. Trade-off documented in the report — we use the Kafka engine as the primary path (lets us do the dictionary JOIN + aggregation inside ClickHouse via MVs); this sink is provided to satisfy the 'Connect config files' bonus and as the path you'd pick when the warehouse should stay a pure sink with DLQ-based error handling."
+  }
+}

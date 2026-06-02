@@ -1,0 +1,34 @@
+{
+  "name": "mysql-users-source",
+  "config": {
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "mysql",
+    "database.port": "3306",
+    "database.user": "azki",
+    "database.password": "azkipw",
+    "database.server.id": "184054",
+    "topic.prefix": "azki",
+
+    "database.include.list": "azki",
+    "table.include.list": "azki.users",
+
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+    "schema.history.internal.kafka.topic": "_schema-history.azki",
+
+    "snapshot.mode": "initial",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+
+    "_comment": "Captures users as a CDC stream into topic azki.azki.users. This is the production-grade alternative to seeding the ClickHouse dictionary directly from MySQL: the warehouse can rebuild the users dimension purely from Kafka, decoupling it from the OLTP DB."
+  }
+}

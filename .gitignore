@@ -1,0 +1,14 @@
+# The task dataset is CONFIDENTIAL — never commit it.
+data/users.csv
+data/user_events.csv
+data/orders/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# misc
+*.log
+.DS_Store
