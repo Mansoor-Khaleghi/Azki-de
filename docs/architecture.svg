@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 560" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7b"/>
+    </marker>
+    <style>
+      .node{rx:9;stroke-width:1.6;}
+      .src{fill:#fde9d4;stroke:#e0a96d;}
+      .kafka{fill:#e7ddf6;stroke:#9b7bd0;}
+      .store{fill:#d8ecf9;stroke:#6aa9d6;}
+      .mv{fill:#dff3e4;stroke:#6cba84;}
+      .out{fill:#fbe0e6;stroke:#d98aa0;}
+      .lbl{font-size:14px;fill:#1f2a36;font-weight:700;}
+      .sub{font-size:11px;fill:#5b6b7b;}
+      .edge{stroke:#5b6b7b;stroke-width:1.8;fill:none;}
+      .edash{stroke:#8a9aab;stroke-width:1.6;fill:none;stroke-dasharray:5 4;}
+      .elbl{font-size:11px;fill:#46566a;font-weight:600;}
+      .badge{fill:#2f3b49;}
+      .bnum{fill:#fff;font-size:12px;font-weight:700;}
+      .title{fill:#2f3b49;font-size:15px;font-weight:700;letter-spacing:.02em;}
+    </style>
+  </defs>
+
+  <text class="title" x="40" y="34">Azki pipeline — events &amp; users → query-ready ClickHouse tables</text>
+
+  <!-- ============ STREAMING / INGEST ROW ============ -->
+  <!-- 1. source CSV -->
+  <rect class="node src" x="40" y="90" width="160" height="64"/>
+  <text class="lbl" x="120" y="118" text-anchor="middle">user_events.csv</text>
+  <text class="sub" x="120" y="136" text-anchor="middle">producer, keyed by user_id</text>
+
+  <!-- Kafka topic -->
+  <rect class="node kafka" x="260" y="90" width="150" height="64"/>
+  <text class="lbl" x="335" y="118" text-anchor="middle">Kafka topic</text>
+  <text class="sub" x="335" y="136" text-anchor="middle">user_events (buffer)</text>
+
+  <!-- Kafka engine -->
+  <rect class="node store" x="470" y="90" width="150" height="64"/>
+  <text class="lbl" x="545" y="118" text-anchor="middle">Kafka engine</text>
+  <text class="sub" x="545" y="136" text-anchor="middle">ClickHouse consumer</text>
+
+  <!-- MV enrich -->
+  <rect class="node mv" x="680" y="90" width="150" height="64"/>
+  <text class="lbl" x="755" y="118" text-anchor="middle">MV: enrich</text>
+  <text class="sub" x="755" y="136" text-anchor="middle">join users via dictGet</text>
+
+  <!-- events_enriched (hub) -->
+  <rect class="node store" x="890" y="90" width="180" height="64"/>
+  <text class="lbl" x="980" y="118" text-anchor="middle">events_enriched</text>
+  <text class="sub" x="980" y="136" text-anchor="middle">raw fact layer · MergeTree</text>
+
+  <!-- ============ USERS DIMENSION (below) ============ -->
+  <rect class="node src" x="40" y="330" width="160" height="64"/>
+  <text class="lbl" x="120" y="358" text-anchor="middle">MySQL users</text>
+  <text class="sub" x="120" y="376" text-anchor="middle">OLTP source table</text>
+
+  <rect class="node mv" x="470" y="330" width="150" height="64"/>
+  <text class="lbl" x="545" y="358" text-anchor="middle">users_dict</text>
+  <text class="sub" x="545" y="376" text-anchor="middle">in-memory HASHED dict</text>
+
+  <!-- ============ AGGREGATE BRANCH (right column) ============ -->
+  <rect class="node mv" x="1130" y="90" width="150" height="64"/>
+  <text class="lbl" x="1205" y="118" text-anchor="middle">MV: aggregate</text>
+  <text class="sub" x="1205" y="136" text-anchor="middle">per day × dims</text>
+
+  <rect class="node store" x="1130" y="210" width="150" height="72"/>
+  <text class="lbl" x="1205" y="237" text-anchor="middle">events_agg_daily</text>
+  <text class="sub" x="1205" y="254" text-anchor="middle">count / sum / avg</text>
+  <text class="sub" x="1205" y="269" text-anchor="middle">AggregatingMergeTree</text>
+
+  <rect class="node out" x="1130" y="340" width="150" height="64"/>
+  <text class="lbl" x="1205" y="368" text-anchor="middle">BI / Dashboards</text>
+  <text class="sub" x="1205" y="386" text-anchor="middle">millisecond reads</text>
+
+  <!-- ============ DENORMALIZE BRANCH (lower middle) ============ -->
+  <rect class="node store" x="680" y="330" width="160" height="64"/>
+  <text class="lbl" x="760" y="354" text-anchor="middle">order tables</text>
+  <text class="sub" x="760" y="372" text-anchor="middle">4 product lines</text>
+  <text class="sub" x="760" y="386" text-anchor="middle">+ financial_order</text>
+
+  <rect class="node mv" x="890" y="330" width="180" height="64"/>
+  <text class="lbl" x="980" y="358" text-anchor="middle">MV: denormalize</text>
+  <text class="sub" x="980" y="376" text-anchor="middle">+ idempotent reconcile</text>
+
+  <rect class="node store" x="890" y="450" width="180" height="64"/>
+  <text class="lbl" x="980" y="478" text-anchor="middle">fact_purchases</text>
+  <text class="sub" x="980" y="496" text-anchor="middle">one wide row per purchase</text>
+
+  <rect class="node out" x="1130" y="450" width="150" height="64"/>
+  <text class="lbl" x="1205" y="478" text-anchor="middle">ML / Analytics</text>
+  <text class="sub" x="1205" y="496" text-anchor="middle">wide feature table</text>
+
+  <!-- ============ EDGES ============ -->
+  <!-- main ingest row -->
+  <path class="edge" d="M200,122 H260" marker-end="url(#arrow)"/>
+  <path class="edge" d="M410,122 H470" marker-end="url(#arrow)"/>
+  <path class="edge" d="M620,122 H680" marker-end="url(#arrow)"/>
+  <path class="edge" d="M830,122 H890" marker-end="url(#arrow)"/>
+
+  <!-- users dimension -->
+  <path class="edge" d="M200,362 H470" marker-end="url(#arrow)"/>
+  <text class="elbl" x="335" y="352" text-anchor="middle">refreshed lookup</text>
+  <path class="edash" d="M545,330 V162 H755 V158" marker-end="url(#arrow)"/>
+  <text class="elbl" x="600" y="250" text-anchor="middle">dictGet</text>
+
+  <!-- aggregate branch -->
+  <path class="edge" d="M1070,122 H1130" marker-end="url(#arrow)"/>
+  <path class="edge" d="M1205,154 V210" marker-end="url(#arrow)"/>
+  <path class="edge" d="M1205,282 V340" marker-end="url(#arrow)"/>
+
+  <!-- denormalize branch -->
+  <path class="edge" d="M980,154 V330" marker-end="url(#arrow)"/>
+  <path class="edge" d="M840,362 H890" marker-end="url(#arrow)"/>
+  <path class="edge" d="M980,394 V450" marker-end="url(#arrow)"/>
+  <path class="edge" d="M1070,482 H1130" marker-end="url(#arrow)"/>
+
+  <!-- ============ STEP BADGES ============ -->
+  <g>
+    <circle class="badge" cx="48" cy="98" r="11"/><text class="bnum" x="48" y="102" text-anchor="middle">1</text>
+    <circle class="badge" cx="478" cy="98" r="11"/><text class="bnum" x="478" y="102" text-anchor="middle">2</text>
+    <circle class="badge" cx="688" cy="98" r="11"/><text class="bnum" x="688" y="102" text-anchor="middle">3</text>
+    <circle class="badge" cx="1138" cy="98" r="11"/><text class="bnum" x="1138" y="102" text-anchor="middle">4</text>
+    <circle class="badge" cx="898" cy="338" r="11"/><text class="bnum" x="898" y="342" text-anchor="middle">5</text>
+  </g>
+
+  <!-- ============ LEGEND ============ -->
+  <g transform="translate(40,528)">
+    <rect class="node src"   x="0"   y="0" width="16" height="14"/><text class="sub" x="22" y="12">source</text>
+    <rect class="node kafka" x="90"  y="0" width="16" height="14"/><text class="sub" x="112" y="12">transport</text>
+    <rect class="node mv"    x="210" y="0" width="16" height="14"/><text class="sub" x="232" y="12">materialized view / dictionary</text>
+    <rect class="node store" x="470" y="0" width="16" height="14"/><text class="sub" x="492" y="12">stored table</text>
+    <rect class="node out"   x="610" y="0" width="16" height="14"/><text class="sub" x="632" y="12">consumer</text>
+    <circle class="badge" cx="720" cy="7" r="9"/><text class="bnum" x="720" y="11" text-anchor="middle" style="font-size:11px">n</text>
+    <text class="sub" x="735" y="12">step (see "How it works")</text>
+  </g>
+</svg>

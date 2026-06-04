@@ -6,12 +6,87 @@ for dashboards and a wide, denormalized purchase table for analytics/ML. The
 stack runs locally with Docker Compose; the data steps are driven by a small
 Python CLI (`python -m azki …`).
 
-> The provided dataset is **confidential** and is git-ignored. Drop `users.csv`
-> and `user_events.csv` into `data/` before running (see [`data/README.md`](data/README.md)).
+---
+
+## 1. Quick start
+
+You need only **Docker** and **Python 3.11+** — no `pip install` required (the
+CLI is pure stdlib; the producer streams through the Kafka container when
+`confluent-kafka` isn't installed).
+
+**First, add the dataset.** It's confidential and git-ignored, so drop the two
+files into `data/` yourself (see [`data/README.md`](data/README.md)):
+
+```
+data/users.csv
+data/user_events.csv
+```
+
+### A) The complete project — full stack + all bonuses
+
+**1. Start the full stack.** Kafka Connect downloads its connector plugins on
+first boot, so give it a minute or two to report healthy:
+
+```bash
+docker compose up -d
+```
+
+**2. Run the core pipeline** (init → seed → produce → reconcile → verify):
+
+```bash
+python -m azki demo
+```
+
+**3. Bonus — Kafka Connect** (Debezium MySQL→Kafka CDC source + ClickHouse sink).
+Run any time after step 1 — it waits for Kafka Connect to finish installing its
+plugins (~1–2 min on first boot):
+
+```bash
+python -m azki connect-register
+```
+
+**4. Bonus — Spark idempotent backfill** for a date window (the first run pulls
+the ~1.5 GB Spark image):
+
+```bash
+python -m azki backfill 2025-10-01 2025-10-07
+```
+
+**5. Bonus — Prefect orchestration** (UI at http://localhost:4200; runs the
+monitoring flow on a 5-minute schedule):
+
+```bash
+docker compose --profile orchestration up -d prefect
+```
+
+### B) Just the core project — no bonuses
+
+Only ClickHouse + MySQL + Kafka, then the pipeline:
+
+```bash
+docker compose up -d clickhouse mysql kafka
+python -m azki demo
+```
+
+`demo` prints a verification table at the end — 20,000 enriched events,
+**0 UNKNOWN** (the MySQL users join landed), and `fact_purchases` matching the
+purchase count. To run the pipeline one stage at a time instead (what each does
+is in [§4](#4-cli-command-reference)):
+
+```bash
+python -m azki init
+python -m azki seed
+python -m azki produce
+python -m azki reconcile
+python -m azki verify
+python -m azki dq
+python -m azki apply-opt
+python -m azki apply-gov
+```
 
 ---
 
-## 1. The big picture (in plain terms)
+## 2. The big picture (in plain terms)
 
 ```
    ┌─────────────┐        ┌──────────┐        ┌────────────────────────────────┐
@@ -49,7 +124,17 @@ Python CLI (`python -m azki …`).
 
 ---
 
-## 2. System design
+## 3. System design
+
+![Azki pipeline system design](docs/architecture.png)
+
+The numbered steps ①–⑤ above match the five steps in [§2](#2-the-big-picture-in-plain-terms).
+If the image doesn't render in your Markdown viewer, open it directly:
+[`docs/architecture.png`](docs/architecture.png) (or the vector source
+[`docs/architecture.svg`](docs/architecture.svg)).
+
+<details>
+<summary>Same diagram as Mermaid source (renders on GitHub)</summary>
 
 ```mermaid
 flowchart LR
@@ -96,6 +181,8 @@ flowchart LR
     FACT --> ML[ML / Analytics]
 ```
 
+</details>
+
 | Component | Role |
 |---|---|
 | Producer | Replays `user_events.csv` into Kafka, keyed by `user_id` |
@@ -112,49 +199,8 @@ flowchart LR
 | Kafka Connect | Debezium source + ClickHouse sink (bonus path) |
 | Prefect flows | ingest / monitoring / backfill orchestration |
 
-The full diagram and component rationale are in
-[`docs/architecture.md`](docs/architecture.md); the deeper write-up is in
+The deeper write-up is in [`docs/architecture.md`](docs/architecture.md) and
 [`docs/technical-report.md`](docs/technical-report.md).
-
----
-
-## 3. Quick start
-
-```bash
-# 0. put the confidential dataset in place:
-#      data/users.csv   data/user_events.csv
-
-# 1. start the stack:
-docker compose up -d                # Kafka, MySQL, ClickHouse
-
-# 2. install the Python deps (the producer needs confluent-kafka):
-pip install -r requirements.txt     # or: pip install -r requirements.lock
-
-# 3. run the pipeline end-to-end:
-python -m azki demo
-#   = init -> seed -> produce -> reconcile -> verify
-```
-
-Or step through it:
-
-```bash
-python -m azki init        # create dictionary, Kafka source, MVs, tables
-python -m azki seed        # generate + load the synthetic order tables (Part 2)
-python -m azki produce     # stream user_events.csv into Kafka
-python -m azki reconcile   # gap-fill late-arriving orders into fact_purchases
-python -m azki verify      # show row counts + sample aggregates
-python -m azki dq          # run the data-quality gate
-python -m azki apply-opt   # Part 2 performance optimizations
-python -m azki apply-gov   # Part 2 governance (roles, masked view, quotas)
-```
-
-Bring up the full stack (Schema Registry, Kafka Connect, Kafka-UI) and the
-Prefect orchestration with Compose profiles:
-
-```bash
-docker compose up -d                                       # full stack
-docker compose --profile orchestration up -d prefect       # Prefect UI at :4200
-```
 
 ---
 
@@ -252,8 +298,13 @@ inside Compose (service names like `clickhouse:8123`, `kafka:9092`).
 ## 9. Tests
 
 ```bash
-pip install -r requirements.txt   # (or just: pip install pytest)
-python -m pytest
+pip install pytest && python -m pytest
+```
+
+No working host pip? Run the same suite in a throwaway container:
+
+```bash
+docker run --rm -v "$PWD":/app -w /app python:3.11-slim sh -c "pip install -q pytest && python -m pytest"
 ```
 
 The suite covers the pure logic without the running stack: config precedence,
@@ -267,24 +318,40 @@ auto-skipped when PySpark isn't installed.
 
 ## 10. Bonus paths
 
-**Kafka Connect** (Debezium MySQL source + ClickHouse sink, creds from `.env`):
+**Kafka Connect** (creds from `.env`):
 
 ```bash
 docker compose up -d
 python -m azki connect-register
 ```
 
-**Spark backfill** — reprocess a date window idempotently:
+This waits for Connect to finish installing its plugins, then registers two
+connectors (both reach `RUNNING`):
+
+- **Debezium MySQL source** — snapshots/streams the `users` table into the
+  `azki.azki.users` topic (the CDC alternative to seeding the ClickHouse
+  dictionary from MySQL directly).
+- **ClickHouse sink (+ DLQ)** — consumes the `user_events` topic into
+  `azki.user_events` (the "pure sink" alternative to the Kafka engine, which is
+  the demo's primary path).
+
+**Spark backfill** — reprocess a date window idempotently. Spark re-enriches and
+de-duplicates the window on its natural key, then the rows are loaded into a
+`ReplacingMergeTree` over HTTP (re-running the same window collapses duplicates
+on merge):
 
 ```bash
 python -m azki backfill 2025-10-01 2025-10-07
 ```
 
+You can prove the transform alone (no ClickHouse load) inside the Spark
+container with `spark/validate_backfill.py`.
+
 **Orchestration** (Prefect — schedules, retries, UI at `:4200`):
 
 ```bash
 docker compose --profile orchestration up -d prefect
-docker exec azki-prefect python orchestration/flows.py monitoring   # run now
+docker exec azki-prefect python orchestration/flows.py monitoring
 ```
 
 The `azki-monitoring` flow runs `reconcile → DQ gate` on a 5-minute schedule;

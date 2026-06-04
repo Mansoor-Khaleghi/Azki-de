@@ -8,14 +8,16 @@
     "database.port": "3306",
     "database.user": "${MYSQL_USER}",
     "database.password": "${MYSQL_PASSWORD}",
+    "database.allowPublicKeyRetrieval": "true",
     "database.server.id": "184054",
-    "topic.prefix": "azki",
+    "database.server.name": "azki",
 
     "database.include.list": "azki",
     "table.include.list": "azki.users",
+    "include.schema.changes": "false",
 
-    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
-    "schema.history.internal.kafka.topic": "_schema-history.azki",
+    "database.history.kafka.bootstrap.servers": "kafka:9092",
+    "database.history.kafka.topic": "_schema-history.azki",
 
     "snapshot.mode": "initial",
 
@@ -29,6 +31,6 @@
     "transforms.unwrap.drop.tombstones": "false",
     "transforms.unwrap.delete.handling.mode": "rewrite",
 
-    "_comment": "Captures users as a CDC stream into topic azki.azki.users (CDC alternative to seeding the ClickHouse dictionary from MySQL directly)."
+    "_comment": "Captures users as a CDC stream into topic azki.azki.users (CDC alternative to seeding the ClickHouse dictionary from MySQL directly). Property names follow Debezium 1.9 (database.server.name + database.history.*)."
   }
 }

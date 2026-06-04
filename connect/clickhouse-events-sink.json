@@ -22,8 +22,8 @@
     "errors.deadletterqueue.topic.replication.factor": "1",
     "errors.deadletterqueue.context.headers.enable": "true",
 
-    "exactlyOnce": "true",
+    "exactlyOnce": "false",
 
-    "_comment": "Connect-managed sink writing user_events into ClickHouse with a DLQ — the alternative to the Kafka table engine (the primary path) when the warehouse should stay a pure sink."
+    "_comment": "Connect-managed sink writing user_events into ClickHouse table azki.user_events with a DLQ — the alternative to the Kafka table engine (the primary path) when the warehouse should stay a pure sink. At-least-once (exactlyOnce=false) so it needs no ClickHouse Keeper/KeeperMap on this single node; `azki connect-register` creates the target table first."
   }
 }

@@ -1,12 +1,16 @@
 # Python dependencies for running the pipeline from the host.
-# The azki CLI itself is pure stdlib; only the producer needs a package.
+#
+# The azki CLI is pure stdlib — `python -m azki demo` needs NOTHING here:
+# the producer streams via the running Kafka container when confluent-kafka
+# is absent. Install these only for the faster native producer and the tests.
 #
 # Pinned versions: requirements.lock
 
-# producer (azki produce)
+# OPTIONAL — native Kafka producer (faster than the docker fallback).
+# If your network/pip can't install it, the CLI falls back automatically.
 confluent-kafka>=2.6
 
-# tests
+# tests (or run them in a container — see README §9)
 pytest>=8.0
 
 # Optional, only if you run these on the host instead of in their containers:

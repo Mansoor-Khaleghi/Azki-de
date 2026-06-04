@@ -31,7 +31,6 @@ INIT_SQL = [
     "clickhouse/part2/11-denormalized-purchases.sql",
 ]
 ORDER_TABLES = ["third", "body", "medical", "fire", "financial"]
-CONNECTORS = ["connect/mysql-users-source.json", "connect/clickhouse-events-sink.json"]
 
 
 def _read(path: str) -> str:
@@ -134,27 +133,83 @@ def cmd_apply_gov(s, a):
     _apply_sql(Client(s), "clickhouse/part2/13-governance.sql", s.render_env())
 
 
-def cmd_connect_register(s, a):
+def _register_connector(env: dict[str, str], path: str) -> None:
+    import json
     import urllib.request
-    env = s.render_env()
-    for path in CONNECTORS:
-        body = render(_read(path), env).encode()
-        req = urllib.request.Request(
-            "http://localhost:8083/connectors", data=body,
-            headers={"Content-Type": "application/json"}, method="POST")
+    spec = json.loads(render(_read(path), env))
+    name = spec["name"]
+    # PUT /connectors/{name}/config is create-or-update, so re-running is safe
+    # (POST /connectors would 409 if the connector already exists).
+    body = json.dumps(spec["config"]).encode()
+    req = urllib.request.Request(
+        f"http://localhost:8083/connectors/{name}/config", data=body,
+        headers={"Content-Type": "application/json"}, method="PUT")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            print(f"registered {name}: {resp.status}")
+    except Exception as e:
+        print(f"failed to register {name}: {e}", file=sys.stderr)
+
+
+def _wait_for_connect(plugins: list[str], attempts: int = 60,
+                      delay: float = 3.0) -> bool:
+    """Poll the Connect REST API until it's up and all ``plugins`` are installed.
+
+    On a fresh `docker compose up`, the connect container reinstalls its plugins
+    on boot (~1-2 min), so registering immediately would fail.
+    """
+    import json
+    import urllib.request
+    for _ in range(attempts):
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                print(f"registered {Path(path).name}: {resp.status}")
-        except Exception as e:
-            print(f"failed to register {Path(path).name}: {e}", file=sys.stderr)
+            with urllib.request.urlopen(
+                    "http://localhost:8083/connector-plugins", timeout=5) as resp:
+                classes = {p.get("class") for p in json.loads(resp.read())}
+            if all(p in classes for p in plugins):
+                return True
+            print("  waiting for Kafka Connect to install plugins...")
+        except Exception:
+            print("  waiting for Kafka Connect REST API (:8083)...")
+        time.sleep(delay)
+    return False
+
+
+def cmd_connect_register(s, a):
+    env = s.render_env()
+    if not _wait_for_connect(["io.debezium.connector.mysql.MySqlConnector",
+                              "com.clickhouse.kafka.connect.ClickHouseSinkConnector"]):
+        print("Kafka Connect not ready (REST :8083 / connector plugins). Is the "
+              "full stack up (`docker compose up -d`) and the connect container "
+              "healthy?", file=sys.stderr)
+        raise SystemExit(1)
+    # Debezium MySQL source — users dimension as a CDC stream.
+    _register_connector(env, "connect/mysql-users-source.json")
+    # ClickHouse sink (+ DLQ) — the "pure sink" alternative to the Kafka engine.
+    # It writes into a table it does not create itself.
+    _apply_sql(Client(s), "connect/clickhouse-sink-target.sql", env)
+    _register_connector(env, "connect/clickhouse-events-sink.json")
 
 
 def cmd_backfill(s, a):
+    import glob
+    client = Client(s)
+    # ReplacingMergeTree target — re-runs of the same window collapse on merge.
+    _apply_sql(client, "spark/backfill_target.sql", s.render_env())
+    # Spark computes + dedups the window and stages one CSV under spark/.
     compose("--profile", "spark", "run", "--rm",
-            "-e", f"CH_PASSWORD={s.ch_password}",
-            "spark", "spark-submit",
-            "--packages", "com.clickhouse:clickhouse-jdbc:0.6.3",
+            "spark", "/opt/spark/bin/spark-submit",
             "/opt/app/backfill_job.py", "--start", a.start, "--end", a.end)
+    # Load the staged CSV into ClickHouse over the same HTTP path the rest of
+    # the pipeline uses (decoupled from any Spark↔ClickHouse JDBC driver).
+    parts = sorted(glob.glob(str(REPO_ROOT / "spark" / "_backfill_out" / "part-*.csv")))
+    if not parts:
+        print("no staged CSV produced by Spark", file=sys.stderr)
+        raise SystemExit(1)
+    for p in parts:
+        client.insert_csv(f"{s.ch_db}.events_enriched_backfill", p)
+    n = client.query(f"SELECT count() FROM {s.ch_db}.events_enriched_backfill")
+    print(f"events_enriched_backfill now {n} rows "
+          f"({len(parts)} staged file(s) loaded)")
 
 
 def cmd_demo(s, a):
@@ -215,7 +270,8 @@ def build_parser(settings: Settings | None = None) -> argparse.ArgumentParser:
     add("reconcile", cmd_reconcile, "gap-fill fact_purchases for late orders")
     add("apply-opt", cmd_apply_opt, "apply Part 2 performance optimizations")
     add("apply-gov", cmd_apply_gov, "apply Part 2 governance (roles/policies)")
-    add("connect-register", cmd_connect_register, "register Kafka Connect connectors")
+    add("connect-register", cmd_connect_register,
+        "register the Debezium source + ClickHouse sink connectors")
 
     sp = add("backfill", cmd_backfill, "run the Spark backfill for a date window")
     sp.add_argument("start", help="inclusive YYYY-MM-DD")

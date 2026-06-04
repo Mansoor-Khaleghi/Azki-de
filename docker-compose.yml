@@ -90,8 +90,8 @@ services:
       - -c
       - |
         echo "Installing connector plugins..."
-        confluent-hub install --no-prompt debezium/debezium-connector-mysql:2.5.4 || true
-        confluent-hub install --no-prompt clickhouse/clickhouse-kafka-connect:v1.2.5 || true
+        confluent-hub install --no-prompt debezium/debezium-connector-mysql:1.9.7 || true
+        confluent-hub install --no-prompt clickhouse/clickhouse-kafka-connect:v1.3.9 || true
         echo "Starting Kafka Connect..."
         /etc/confluent/docker/run
     healthcheck:
@@ -125,6 +125,7 @@ services:
       - --server-id=1
       - --log-bin=mysql-bin
       - --binlog-format=ROW           # required for Debezium CDC
+      - --default-authentication-plugin=mysql_native_password  # Debezium 1.9 binlog client + CH dict over plaintext
     ports:
       - "3306:3306"
     environment:
@@ -215,7 +216,7 @@ services:
       - |
         pip install --no-cache-dir confluent-kafka >/dev/null
         prefect server start --host 0.0.0.0 &
-        until curl -sf http://127.0.0.1:4200/api/health >/dev/null; do sleep 2; done
+        until python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:4200/api/health')" >/dev/null 2>&1; do sleep 2; done
         echo "Prefect server up — serving azki-monitoring every 5 min"
         python orchestration/flows.py serve
 

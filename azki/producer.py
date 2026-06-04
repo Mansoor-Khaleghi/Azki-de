@@ -1,10 +1,29 @@
-"""Stream user_events.csv into Kafka as JSONEachRow, keyed by user_id."""
+"""Stream user_events.csv into Kafka as JSONEachRow, keyed by user_id.
+
+Two interchangeable backends, picked automatically:
+
+* **confluent-kafka** — the native client, used when the package is installed
+  (``pip install confluent-kafka``). Highest throughput, idempotent producer.
+* **docker fallback** — pipes the same keyed ``JSONEachRow`` lines into the
+  running Kafka container's ``kafka-console-producer.sh``. Needs nothing on the
+  host but a working ``docker``, so the demo runs from zero with no pip install.
+
+Both write byte-for-byte identical messages to the topic, so ClickHouse's Kafka
+engine consumes them the same way.
+"""
 from __future__ import annotations
 
 import csv
 import json
+import os
+import subprocess
 import sys
 import time
+
+# Container + in-container bootstrap used by the docker fallback. The compose
+# file pins the broker's name to ``azki-kafka`` and exposes PLAINTEXT on 9092.
+KAFKA_CONTAINER = os.environ.get("KAFKA_CONTAINER", "azki-kafka")
+KAFKA_CONTAINER_BOOTSTRAP = os.environ.get("KAFKA_CONTAINER_BOOTSTRAP", "localhost:9092")
 
 
 def build_event(row: dict) -> dict:
@@ -20,9 +39,33 @@ def build_event(row: dict) -> dict:
     }
 
 
+def _iter_events(file: str, limit: int):
+    """Yield (key, json_value) pairs from the CSV, capped at ``limit``."""
+    with open(file, newline="") as fh:
+        for i, row in enumerate(csv.DictReader(fh)):
+            if limit and i >= limit:
+                break
+            event = build_event(row)
+            yield str(event["user_id"]), json.dumps(event)
+
+
 def stream(bootstrap: str, topic: str, file: str,
            rate: float = 0.0, limit: int = 0) -> tuple[int, int, int]:
-    """Produce events to Kafka; return (sent, delivered, failed)."""
+    """Produce events to Kafka; return (sent, delivered, failed).
+
+    Uses confluent-kafka if importable, otherwise the docker console-producer.
+    """
+    try:
+        import confluent_kafka  # noqa: F401
+    except ImportError:
+        print("confluent-kafka not installed — producing via the Kafka "
+              f"container ({KAFKA_CONTAINER}).")
+        return _stream_docker(topic, file, rate, limit)
+    return _stream_confluent(bootstrap, topic, file, rate, limit)
+
+
+def _stream_confluent(bootstrap: str, topic: str, file: str,
+                      rate: float, limit: int) -> tuple[int, int, int]:
     from confluent_kafka import Producer
 
     producer = Producer({
@@ -46,26 +89,74 @@ def stream(bootstrap: str, topic: str, file: str,
             delivered += 1
 
     start = time.monotonic()
-    with open(file, newline="") as fh:
-        for row in csv.DictReader(fh):
-            event = build_event(row)
-            producer.produce(topic=topic, key=str(event["user_id"]),
-                             value=json.dumps(event), on_delivery=on_delivery)
-            sent += 1
-            producer.poll(0)
-
-            if rate > 0:
-                drift = sent / rate - (time.monotonic() - start)
-                if drift > 0:
-                    time.sleep(drift)
-            if limit and sent >= limit:
-                break
-            if sent % 2000 == 0:
-                print(f"  queued {sent} rows...")
+    for key, value in _iter_events(file, limit):
+        producer.produce(topic=topic, key=key, value=value, on_delivery=on_delivery)
+        sent += 1
+        producer.poll(0)
+        if rate > 0:
+            drift = sent / rate - (time.monotonic() - start)
+            if drift > 0:
+                time.sleep(drift)
+        if sent % 2000 == 0:
+            print(f"  queued {sent} rows...")
 
     print(f"Flushing ({sent} rows queued)...")
     producer.flush(60)
     elapsed = time.monotonic() - start
+    print(f"Done. sent={sent} delivered={delivered} failed={failed} "
+          f"in {elapsed:.1f}s ({sent / max(elapsed, 1e-9):.0f} msg/s)")
+    return sent, delivered, failed
+
+
+def _stream_docker(topic: str, file: str,
+                   rate: float, limit: int) -> tuple[int, int, int]:
+    """Pipe keyed JSONEachRow lines into the broker's console producer.
+
+    The console producer reads ``<user_id>\\t<json>`` lines from stdin; we set
+    ``parse.key=true`` so each message keeps the same partitioning key as the
+    native client. ``acks=all`` mirrors the idempotent settings above.
+    """
+    cmd = [
+        "docker", "exec", "-i", KAFKA_CONTAINER,
+        "/opt/kafka/bin/kafka-console-producer.sh",
+        "--bootstrap-server", KAFKA_CONTAINER_BOOTSTRAP,
+        "--topic", topic,
+        "--producer-property", "acks=all",
+        "--producer-property", "compression.type=lz4",
+        "--property", "parse.key=true",
+        "--property", "key.separator=\t",
+    ]
+    start = time.monotonic()
+    sent = 0
+    try:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, text=True)
+    except FileNotFoundError:
+        print("ERROR: `docker` not found and confluent-kafka is not installed. "
+              "Install confluent-kafka (pip install confluent-kafka) or run with "
+              "docker available.", file=sys.stderr)
+        return 0, 0, 1
+
+    assert proc.stdin is not None
+    try:
+        for key, value in _iter_events(file, limit):
+            proc.stdin.write(f"{key}\t{value}\n")
+            sent += 1
+            if rate > 0:
+                proc.stdin.flush()
+                drift = sent / rate - (time.monotonic() - start)
+                if drift > 0:
+                    time.sleep(drift)
+            if sent % 2000 == 0:
+                print(f"  queued {sent} rows...")
+        proc.stdin.close()
+    except BrokenPipeError:
+        pass
+
+    print(f"Flushing ({sent} rows queued)...")
+    rc = proc.wait(timeout=120)
+    elapsed = time.monotonic() - start
+    failed = 0 if rc == 0 else sent
+    delivered = sent if rc == 0 else 0
     print(f"Done. sent={sent} delivered={delivered} failed={failed} "
           f"in {elapsed:.1f}s ({sent / max(elapsed, 1e-9):.0f} msg/s)")
     return sent, delivered, failed
