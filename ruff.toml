@@ -1,0 +1,7 @@
+# Ruff config for the azki project.
+target-version = "py311"
+line-length = 90
+
+[lint]
+# pycodestyle errors/warnings, pyflakes, import sorting, and pyupgrade.
+select = ["E", "W", "F", "I", "UP"]

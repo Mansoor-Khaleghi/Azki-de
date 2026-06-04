@@ -164,6 +164,7 @@ def _stream_docker(topic: str, file: str,
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
+
     from .config import load_settings
     s = load_settings()
     ap = argparse.ArgumentParser(description="Stream user_events.csv to Kafka")

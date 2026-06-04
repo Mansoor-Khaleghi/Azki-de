@@ -20,7 +20,7 @@ def test_only_purchases_become_orders(sample_events_csv, tmp_path):
     counts = orders.generate_orders(str(sample_events_csv), str(out))
     # the sample has 2 purchases (+1 view, ignored)
     assert counts["financial"] == 2
-    assert sum(counts[l] for l in orders.PRODUCT_LINES) == 2
+    assert sum(counts[line] for line in orders.PRODUCT_LINES) == 2
 
 
 def test_every_product_order_has_one_financial_row(sample_events_csv, tmp_path):
@@ -51,4 +51,5 @@ def test_seed_makes_output_reproducible(sample_events_csv, tmp_path):
     orders.generate_orders(str(sample_events_csv), str(a), seed=7)
     orders.generate_orders(str(sample_events_csv), str(b), seed=7)
     for line in list(orders.PRODUCT_LINES) + ["financial"]:
-        assert (a / f"{line}_order.csv").read_text() == (b / f"{line}_order.csv").read_text()
+        name = f"{line}_order.csv"
+        assert (a / name).read_text() == (b / name).read_text()

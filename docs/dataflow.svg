@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7b"/>
+    </marker>
+    <style>
+      .hdr{rx:8;stroke-width:1.6;}
+      .src{fill:#fde9d4;stroke:#e0a96d;}
+      .kafka{fill:#e7ddf6;stroke:#9b7bd0;}
+      .ch{fill:#d8ecf9;stroke:#6aa9d6;}
+      .out{fill:#fbe0e6;stroke:#d98aa0;}
+      .hname{font-size:13px;fill:#1f2a36;font-weight:700;}
+      .hsub{font-size:10px;fill:#5b6b7b;}
+      .life{stroke:#b9c4d0;stroke-width:1.4;stroke-dasharray:4 4;}
+      .msg{stroke:#5b6b7b;stroke-width:1.7;fill:none;}
+      .mlbl{font-size:12px;fill:#1f2a36;}
+      .self{stroke:#6aa9d6;stroke-width:1.7;fill:none;}
+      .badge{fill:#2f3b49;}
+      .bnum{fill:#fff;font-size:11px;font-weight:700;}
+      .title{fill:#2f3b49;font-size:15px;font-weight:700;}
+      .note{fill:#f4f7d8;stroke:#c9cf7a;rx:8;}
+      .ntxt{font-size:11.5px;fill:#42481f;}
+    </style>
+  </defs>
+
+  <text class="title" x="40" y="32">Data flow — one event's journey, end to end</text>
+
+  <!-- ===== lifeline headers ===== -->
+  <rect class="hdr src"   x="35"   y="48" width="130" height="46"/>
+  <text class="hname" x="100"  y="70" text-anchor="middle">Producer</text>
+  <text class="hsub"  x="100"  y="85" text-anchor="middle">reads CSV</text>
+
+  <rect class="hdr kafka" x="245"  y="48" width="130" height="46"/>
+  <text class="hname" x="310"  y="70" text-anchor="middle">Kafka topic</text>
+  <text class="hsub"  x="310"  y="85" text-anchor="middle">user_events</text>
+
+  <rect class="hdr src"   x="445"  y="48" width="130" height="46"/>
+  <text class="hname" x="510"  y="70" text-anchor="middle">MySQL</text>
+  <text class="hsub"  x="510"  y="85" text-anchor="middle">users (OLTP)</text>
+
+  <rect class="hdr ch"    x="655"  y="48" width="130" height="46"/>
+  <text class="hname" x="720"  y="70" text-anchor="middle">ClickHouse</text>
+  <text class="hsub"  x="720"  y="85" text-anchor="middle">engine + MVs</text>
+
+  <rect class="hdr out"   x="1015" y="48" width="130" height="46"/>
+  <text class="hname" x="1080" y="70" text-anchor="middle">Consumers</text>
+  <text class="hsub"  x="1080" y="85" text-anchor="middle">BI / ML</text>
+
+  <!-- ===== lifelines ===== -->
+  <line class="life" x1="100"  y1="94" x2="100"  y2="452"/>
+  <line class="life" x1="310"  y1="94" x2="310"  y2="452"/>
+  <line class="life" x1="510"  y1="94" x2="510"  y2="452"/>
+  <line class="life" x1="720"  y1="94" x2="720"  y2="452"/>
+  <line class="life" x1="1080" y1="94" x2="1080" y2="452"/>
+
+  <!-- ===== messages ===== -->
+  <!-- 1 producer -> kafka -->
+  <text class="mlbl" x="205" y="120" text-anchor="middle">stream events · JSONEachRow · key=user_id</text>
+  <line class="msg" x1="100" y1="128" x2="310" y2="128" marker-end="url(#a)"/>
+  <circle class="badge" cx="100" cy="128" r="10"/><text class="bnum" x="100" y="132" text-anchor="middle">1</text>
+
+  <!-- 2 mysql -> clickhouse (dict load) -->
+  <text class="mlbl" x="615" y="160" text-anchor="middle">users_dict ← MySQL (HASHED, auto-refresh)</text>
+  <line class="msg" x1="510" y1="168" x2="720" y2="168" marker-end="url(#a)"/>
+  <circle class="badge" cx="510" cy="168" r="10"/><text class="bnum" x="510" y="172" text-anchor="middle">2</text>
+
+  <!-- 3 kafka -> clickhouse consume -->
+  <text class="mlbl" x="515" y="200" text-anchor="middle">Kafka engine consumes the topic</text>
+  <line class="msg" x1="310" y1="208" x2="720" y2="208" marker-end="url(#a)"/>
+  <circle class="badge" cx="310" cy="208" r="10"/><text class="bnum" x="310" y="212" text-anchor="middle">3</text>
+
+  <!-- 4 self: enrich -->
+  <path class="self" d="M720,236 H770 V256 H722" marker-end="url(#a)"/>
+  <circle class="badge" cx="720" cy="236" r="10"/><text class="bnum" x="720" y="240" text-anchor="middle">4</text>
+  <text class="mlbl" x="784" y="250">enrich MV: dictGet(user_id) → events_enriched</text>
+
+  <!-- 5 self: aggregate -->
+  <path class="self" d="M720,288 H770 V308 H722" marker-end="url(#a)"/>
+  <circle class="badge" cx="720" cy="288" r="10"/><text class="bnum" x="720" y="292" text-anchor="middle">5</text>
+  <text class="mlbl" x="784" y="302">aggregate MV → events_agg_daily (count/sum/avg)</text>
+
+  <!-- 6 self: denormalize -->
+  <path class="self" d="M720,340 H770 V360 H722" marker-end="url(#a)"/>
+  <circle class="badge" cx="720" cy="340" r="10"/><text class="bnum" x="720" y="344" text-anchor="middle">6</text>
+  <text class="mlbl" x="784" y="354">denormalize MV: join orders → fact_purchases</text>
+
+  <!-- 7 clickhouse -> consumers -->
+  <text class="mlbl" x="900" y="396" text-anchor="middle">BI reads agg · ML reads fact_purchases</text>
+  <line class="msg" x1="720" y1="404" x2="1080" y2="404" marker-end="url(#a)"/>
+  <circle class="badge" cx="720" cy="404" r="10"/><text class="bnum" x="720" y="408" text-anchor="middle">7</text>
+
+  <!-- ===== side-flows note ===== -->
+  <rect class="note" x="35" y="470" width="1110" height="64"/>
+  <text class="ntxt" x="50" y="492" font-weight="700">Completeness side-flows (scheduled / batch):</text>
+  <text class="ntxt" x="50" y="510">• Late orders — an idempotent <tspan font-weight="700">reconcile</tspan> back-fills purchases whose order row arrived after the streaming join (guarded by order_id).</text>
+  <text class="ntxt" x="50" y="527">• History — a <tspan font-weight="700">Spark backfill</tspan> re-enriches a date window and loads events_enriched_backfill (ReplacingMergeTree) over HTTP.</text>
+</svg>

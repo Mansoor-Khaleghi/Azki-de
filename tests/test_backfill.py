@@ -7,9 +7,8 @@ import pytest
 
 pyspark = pytest.importorskip("pyspark")
 
-from pyspark.sql import SparkSession  # noqa: E402
-
 import backfill_job  # from spark/ (added to sys.path in conftest)  # noqa: E402
+from pyspark.sql import SparkSession  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +53,8 @@ def test_unknown_user_enriched_as_unknown(spark):
 
 
 def test_idempotent_row_count(spark):
-    a = backfill_job.enrich_window(_events(spark), _users(spark), "2025-10-01", "2025-10-07").count()
-    b = backfill_job.enrich_window(_events(spark), _users(spark), "2025-10-01", "2025-10-07").count()
-    assert a == b
+    def window():
+        return backfill_job.enrich_window(
+            _events(spark), _users(spark), "2025-10-01", "2025-10-07").count()
+
+    assert window() == window()

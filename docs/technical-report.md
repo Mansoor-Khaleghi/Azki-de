@@ -48,10 +48,11 @@ dictGet) → events_enriched → MV (aggregate) → events_agg_daily`.
 ### Bonus — Kafka cluster & Connect
 Compose brings up Kafka (KRaft), Schema Registry, Kafka Connect, and Kafka-UI.
 `connect/` holds two connector configs: a **Debezium MySQL source** (users CDC →
-topic) and a **ClickHouse sink** (topic → table, with a DLQ). The report's
-primary path uses the Kafka engine because it lets the join+aggregation happen
-inside ClickHouse via MVs; the sink connector is the alternative when the
-warehouse should remain a pure sink.
+topic) and a **ClickHouse sink** (topic → `user_events` table, with a DLQ).
+`azki connect-register` waits for the plugins to install, then registers both
+(both reach `RUNNING`). The report's primary path uses the Kafka engine because
+it lets the join+aggregation happen inside ClickHouse via MVs; the sink
+connector is the alternative when the warehouse should remain a pure sink.
 
 ## 3. Part 2 — Denormalization, performance & governance
 
@@ -116,9 +117,13 @@ and the kind of issue that opens a data-contract ticket.
 
 ### Bonus — Spark backfill
 `spark/backfill_job.py` reprocesses a date range from cold storage, re-enriches
-against users (broadcast join), de-duplicates on the natural key, and loads
-ClickHouse **idempotently** (ReplacingMergeTree + optional partition-scoped
-`ALTER … DELETE` for hard restatements).
+against users (broadcast join), and de-duplicates on the natural key. Spark does
+the heavy compute and **stages the result as a single CSV**; `azki backfill`
+then loads it into a `ReplacingMergeTree` target over ClickHouse's HTTP
+interface — the same ingestion path the rest of the pipeline uses, so the load
+is decoupled from any Spark↔ClickHouse JDBC driver/version coupling. Re-running
+the same window stays at the deduped count (duplicates collapse on the natural
+key; read with `FINAL`).
 
 ### Orchestration (Prefect)
 [`orchestration/flows.py`](../orchestration/flows.py) wraps the pipeline as
@@ -169,7 +174,8 @@ and the bloom-filter skip indexes were confirmed active, and the Prefect
 
 - **One command surface.** A small stdlib-only Python CLI (`python -m azki`)
   runs the data steps (`init`, `seed`, `produce`, `verify`, `dq`, `reconcile`,
-  `apply-opt`, `apply-gov`, `backfill`, `demo`) against the Compose stack.
+  `apply-opt`, `apply-gov`, `connect-register`, `backfill`, `demo`) against the
+  Compose stack.
   ClickHouse is driven over its HTTP interface, so every command runs
   identically on the host, in CI, or inside a container.
 - **Secrets from `.env` only.** No password is hardcoded in the code. Connection

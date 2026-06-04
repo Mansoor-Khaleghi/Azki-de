@@ -13,9 +13,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from backfill_job import EVENTS_SCHEMA, USERS_SCHEMA, enrich_window  # noqa: E402
 from pyspark.sql import SparkSession  # noqa: E402
-
-from backfill_job import (EVENTS_SCHEMA, USERS_SCHEMA, enrich_window)  # noqa: E402
 
 
 def main():

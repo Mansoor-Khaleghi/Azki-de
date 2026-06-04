@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time  # noqa: E402
 
-from prefect import flow, task, get_run_logger  # noqa: E402
+from prefect import flow, get_run_logger, task  # noqa: E402
 
 from azki.clickhouse import Client  # noqa: E402
 from azki.config import load_settings  # noqa: E402
@@ -47,7 +47,8 @@ def wait_for_consumption(expected: int = 20000, timeout_s: int = 120):
     deadline = time.monotonic() + timeout_s
     n = 0
     while time.monotonic() < deadline:
-        n = int(CLIENT.query(f"SELECT count() FROM {SETTINGS.ch_db}.events_enriched") or 0)
+        n = int(CLIENT.query(
+            f"SELECT count() FROM {SETTINGS.ch_db}.events_enriched") or 0)
         if n >= expected:
             log.info(f"consumed {n} rows")
             return n
@@ -78,7 +79,8 @@ def run_dq_gate(expected: int = 20000):
 @task(retries=1)
 def trigger_backfill(start: str, end: str):
     log = get_run_logger()
-    r = _run([sys.executable, "spark/validate_backfill.py", "--start", start, "--end", end])
+    r = _run([sys.executable, "spark/validate_backfill.py",
+              "--start", start, "--end", end])
     log.info(r.stdout[-800:])
     if r.returncode != 0:
         raise RuntimeError(f"backfill failed: {r.stderr[-500:]}")

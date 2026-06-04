@@ -21,3 +21,6 @@ prefect.db*
 
 # Spark backfill staging output
 spark/_backfill_out/
+
+# IDE
+.idea/

@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from pathlib import Path
 
 from . import orders, producer, quality
 from .clickhouse import Client, render

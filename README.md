@@ -131,7 +131,10 @@ python -m azki apply-gov
 The numbered steps ①–⑤ above match the five steps in [§2](#2-the-big-picture-in-plain-terms).
 If the image doesn't render in your Markdown viewer, open it directly:
 [`docs/architecture.png`](docs/architecture.png) (or the vector source
-[`docs/architecture.svg`](docs/architecture.svg)).
+[`docs/architecture.svg`](docs/architecture.svg)). For a step-by-step view of how
+data moves through the pipeline, see the data-flow diagram
+[`docs/dataflow.png`](docs/dataflow.png) (detailed in
+[`docs/architecture.md`](docs/architecture.md)).
 
 <details>
 <summary>Same diagram as Mermaid source (renders on GitHub)</summary>

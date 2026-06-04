@@ -1,12 +1,24 @@
 # Architecture
 
-## End-to-end data flow
+Two views of the same pipeline: the **topology** (what the components are and how
+they connect) and the **data flow** (how a single event travels through them).
+
+## Topology
+
+![System design](architecture.png)
+
+## Data flow
+
+![Data flow](dataflow.png)
+
+<details>
+<summary>Topology as Mermaid source (renders on GitHub)</summary>
 
 ```mermaid
 flowchart LR
     subgraph Sources
         CSV[user_events.csv]
-        MYSQL[(MySQL\nusers)]
+        MYSQL[(MySQL users)]
     end
 
     subgraph Kafka["Kafka (KRaft)"]
@@ -22,17 +34,17 @@ flowchart LR
 
     subgraph ClickHouse
         KE[[Kafka engine table]]
-        DICT{{users_dict\nMySQL dictionary}}
+        DICT{{users_dict MySQL dictionary}}
         MV1([MV: enrich via dictGet])
-        ENR[(events_enriched\nMergeTree)]
+        ENR[(events_enriched MergeTree)]
         MV2([MV: aggregate])
-        AGG[(events_agg_daily\nAggregatingMergeTree)]
+        AGG[(events_agg_daily AggregatingMergeTree)]
         MV3([MV: denormalize purchases])
-        ORD[(third/body/medical/fire\n+ financial_order)]
-        FACT[(fact_purchases\ndenormalized)]
+        ORD[(third/body/medical/fire + financial_order)]
+        FACT[(fact_purchases denormalized)]
     end
 
-    CSV -->|Python producer\nJSONEachRow| TOPIC
+    CSV -->|Python producer JSONEachRow| TOPIC
     MYSQL -. CDC .-> DBZ -.-> TOPIC
     MYSQL ==>|refreshed lookup| DICT
     TOPIC --> KE --> MV1
@@ -47,11 +59,13 @@ flowchart LR
     FACT --> ML[ML / Analytics]
 ```
 
+</details>
+
 ## Component roles
 
 | Component | Role | Why |
 |---|---|---|
-| **Python producer** | Replays `user_events.csv` into Kafka, keyed by `user_id` | Decouples ingestion; per-user ordering; throttle to simulate live stream |
+| **Python producer** | Replays `user_events.csv` into Kafka, keyed by `user_id` | Decouples ingestion; per-user ordering; throttle to simulate a live stream. Streams via the native `confluent-kafka` client, or the Kafka container's console producer when that package isn't installed |
 | **Kafka (KRaft)** | Event transport | No ZooKeeper; single-node for the task |
 | **Schema Registry** | Topic contract | Schema-drift defense (Part 3) |
 | **MySQL** | "Production" users table | The OLTP source to join against |
@@ -63,10 +77,10 @@ flowchart LR
 | **`fact_purchases`** | Denormalized purchases | Part 2: events + order details, one wide row |
 | **denorm reconcile** | Idempotent gap-filler | Closes late-arriving-order gaps the INNER-JOIN MV can't backfill |
 | **Kafka lineage columns** | `topic/partition/offset/timestamp` + `ingest_lag_sec` on each row | Exact offset-gap (missing-events) detection + per-row latency |
-| **Prefect flows** | ingest / monitoring / backfill orchestration | Scheduling + retries; DQ gate fails the run; wraps existing scripts |
-| **Kafka Connect** | Debezium source + CH sink | Bonus: production-grade CDC + sink path |
+| **Prefect flows** | ingest / monitoring / backfill orchestration | Scheduling + retries; DQ gate fails the run; wraps the existing CLI |
+| **Kafka Connect** | Debezium MySQL source + ClickHouse sink (+ DLQ) | Bonus: production-grade CDC source and a "pure sink" alternative to the Kafka engine |
 
-## Why ClickHouse-native join (vs Spark / ksqlDB)
+## Why a ClickHouse-native join (vs Spark / ksqlDB)
 
 The join is a **stream-to-static-dimension lookup** (events ⨝ users). A
 ClickHouse `dictGet` against a MySQL-backed dictionary does this in-process at
