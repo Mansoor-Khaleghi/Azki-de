@@ -9,17 +9,19 @@
       .kafka{fill:#e7ddf6;stroke:#9b7bd0;}
       .ch{fill:#d8ecf9;stroke:#6aa9d6;}
       .out{fill:#fbe0e6;stroke:#d98aa0;}
-      .hname{font-size:13px;fill:#1f2a36;font-weight:700;}
-      .hsub{font-size:10px;fill:#5b6b7b;}
-      .life{stroke:#b9c4d0;stroke-width:1.4;stroke-dasharray:4 4;}
-      .msg{stroke:#5b6b7b;stroke-width:1.7;fill:none;}
-      .mlbl{font-size:12px;fill:#1f2a36;}
-      .self{stroke:#6aa9d6;stroke-width:1.7;fill:none;}
-      .badge{fill:#2f3b49;}
+      .hname{font-size:13px;fill:#11202e;font-weight:700;}
+      .hsub{font-size:10.5px;fill:#3c4a59;}
+      .life{stroke:#aab6c4;stroke-width:1.4;stroke-dasharray:4 4;}
+      .msg{stroke:#3f5060;stroke-width:1.9;fill:none;}
+      /* white halo so labels stay legible where they cross lifelines/arrows */
+      .mlbl{font-size:12.5px;fill:#0f1d2a;font-weight:600;
+            paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round;}
+      .self{stroke:#3f8fc4;stroke-width:2;fill:none;}
+      .badge{fill:#22303d;}
       .bnum{fill:#fff;font-size:11px;font-weight:700;}
-      .title{fill:#2f3b49;font-size:15px;font-weight:700;}
-      .note{fill:#f4f7d8;stroke:#c9cf7a;rx:8;}
-      .ntxt{font-size:11.5px;fill:#42481f;}
+      .title{fill:#1b2733;font-size:15px;font-weight:700;}
+      .note{fill:#f4f7d8;stroke:#b6bd66;stroke-width:1.4;rx:8;}
+      .ntxt{font-size:11.5px;fill:#33381a;}
     </style>
   </defs>
 
