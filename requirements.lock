@@ -1,16 +1,7 @@
-# =====================================================================
-#  Azki DE Task — pinned dependency lock (reproducible installs)
+# Pinned host dependencies (reproducible installs).
+#   pip install -r requirements.lock
 #
-#  Exact versions the project is developed and tested against. The CLI is
-#  stdlib-only; these pins cover the optional producer / orchestration /
-#  backfill / test paths. pyspark is pinned to match the compose Spark image
-#  (apache/spark:3.5.3).
-#
-#  Install:    pip install -r requirements.lock
-#  Regenerate: pip install -r requirements.txt && pip freeze > requirements.lock
-#              (or use pip-compile for a full transitive lock with hashes)
-# =====================================================================
+# Optional bonus-path deps, normally run inside their containers:
+#   prefect==3.7.3    pyspark==3.5.3
 confluent-kafka==2.14.0
-prefect==3.7.3
-pyspark==3.5.3
 pytest==8.3.5

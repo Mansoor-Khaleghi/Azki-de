@@ -24,6 +24,6 @@
 
     "exactlyOnce": "true",
 
-    "_comment": "Alternative to the ClickHouse Kafka table engine: a Connect-managed sink writing the user_events topic into a target table. Trade-off documented in the report — we use the Kafka engine as the primary path (lets us do the dictionary JOIN + aggregation inside ClickHouse via MVs); this sink is provided to satisfy the 'Connect config files' bonus and as the path you'd pick when the warehouse should stay a pure sink with DLQ-based error handling."
+    "_comment": "Connect-managed sink writing user_events into ClickHouse with a DLQ — the alternative to the Kafka table engine (the primary path) when the warehouse should stay a pure sink."
   }
 }

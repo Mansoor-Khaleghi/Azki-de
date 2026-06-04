@@ -29,6 +29,6 @@
     "transforms.unwrap.drop.tombstones": "false",
     "transforms.unwrap.delete.handling.mode": "rewrite",
 
-    "_comment": "Captures users as a CDC stream into topic azki.azki.users. This is the production-grade alternative to seeding the ClickHouse dictionary directly from MySQL: the warehouse can rebuild the users dimension purely from Kafka, decoupling it from the OLTP DB."
+    "_comment": "Captures users as a CDC stream into topic azki.azki.users (CDC alternative to seeding the ClickHouse dictionary from MySQL directly)."
   }
 }

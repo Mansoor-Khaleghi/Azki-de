@@ -53,9 +53,6 @@ def parse_args():
     ap.add_argument("--users", default="/opt/data/users.csv")
     ap.add_argument("--ch-url", default="jdbc:clickhouse://clickhouse:8123/azki")
     ap.add_argument("--ch-user", default=os.environ.get("CH_USER", "azki"))
-    # Credential comes from the environment (CH_PASSWORD), injected by
-    # `azki backfill` via `docker compose run -e CH_PASSWORD=...`. No secret
-    # is hardcoded; pass --ch-password explicitly only for ad-hoc runs.
     ap.add_argument("--ch-password", default=os.environ.get("CH_PASSWORD", ""))
     ap.add_argument("--target", default="events_enriched_backfill")
     ap.add_argument("--overwrite", action="store_true",

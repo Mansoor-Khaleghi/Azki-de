@@ -1,10 +1,4 @@
-"""Data-quality gate (Part 3).
-
-Executes the checks in ``quality/dq_checks.sql`` against ClickHouse and prints a
-report. Each check returns (check_name, status, metric); a ``FAIL`` makes the
-gate exit non-zero (a ``WARN`` does not), so this drops straight into CI /
-Prefect as a quality gate.
-"""
+"""Data-quality gate: run dq_checks.sql and exit non-zero on any FAIL."""
 from __future__ import annotations
 
 from .clickhouse import Client, split_statements
@@ -12,7 +6,7 @@ from .config import load_settings
 
 
 def parse_check(out: str) -> tuple[str, str, str] | None:
-    """Parse one tab-separated check result row into (name, status, metric)."""
+    """Parse a tab-separated check result into (name, status, metric)."""
     if not out:
         return None
     cols = out.split("\t")
@@ -23,7 +17,7 @@ def parse_check(out: str) -> tuple[str, str, str] | None:
 
 
 def run_checks(client: Client, sql_path: str, expected: int) -> tuple[int, int]:
-    """Run every check; print a report; return (failures, warnings)."""
+    """Run every check, print a report, return (failures, warnings)."""
     params = {"param_expected": str(expected), "default_format": "TabSeparated"}
     with open(sql_path) as fh:
         statements = split_statements(fh.read())
@@ -34,7 +28,7 @@ def run_checks(client: Client, sql_path: str, expected: int) -> tuple[int, int]:
     for stmt in statements:
         try:
             parsed = parse_check(client.query(stmt, params))
-        except Exception as e:  # noqa: BLE001 — a broken check is itself a failure
+        except Exception as e:
             print(f"{'<query error>':<32} {'ERROR':<6} {e}")
             failures += 1
             continue
@@ -54,17 +48,15 @@ def run_checks(client: Client, sql_path: str, expected: int) -> tuple[int, int]:
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
+    from dataclasses import replace
     s = load_settings()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--host", default=s.ch_host)
     ap.add_argument("--port", type=int, default=s.ch_port)
-    ap.add_argument("--expected", type=int, default=20000,
-                    help="expected source row count for the parity check")
+    ap.add_argument("--expected", type=int, default=20000)
     ap.add_argument("--sql", default="quality/dq_checks.sql")
     args = ap.parse_args(argv)
 
-    # Allow host/port override on the CLI while keeping creds from settings.
-    from dataclasses import replace
     client = Client(replace(s, ch_host=args.host, ch_port=args.port))
     failures, _ = run_checks(client, args.sql, args.expected)
     return 1 if failures else 0

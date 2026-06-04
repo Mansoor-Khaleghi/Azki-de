@@ -1,16 +1,4 @@
-"""Single source of truth for connection settings and credentials.
-
-Everything is read from the environment, falling back to the committed ``.env``
-file (throwaway local-demo creds only — see the header in ``.env``). Real
-process env vars always win over the file, so the same code runs unchanged:
-
-  * on the host          -> reads ``.env`` (CH on localhost:8123, Kafka :29092)
-  * inside compose       -> compose injects CH_HOST=clickhouse, KAFKA_BOOTSTRAP=
-                            kafka:9092 etc., which override the file values.
-
-No password is hardcoded anywhere else in the project; SQL/connector templates
-carry ``${VAR}`` placeholders that the CLI fills from these settings.
-"""
+"""Connection settings and credentials, loaded from the environment / .env."""
 from __future__ import annotations
 
 import os
@@ -21,7 +9,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
-    """Minimal ``.env`` parser (no python-dotenv dependency)."""
     data: dict[str, str] = {}
     if not path.exists():
         return data
@@ -35,7 +22,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 def _pick(env_file: dict[str, str], *keys: str, default: str = "") -> str:
-    """Real env var wins, then the .env file value, then the default."""
+    """Process env wins, then the .env file, then the default."""
     for k in keys:
         if os.environ.get(k):
             return os.environ[k]
@@ -47,22 +34,18 @@ def _pick(env_file: dict[str, str], *keys: str, default: str = "") -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    # ClickHouse (analytical warehouse)
     ch_host: str
     ch_port: int
     ch_user: str
     ch_password: str
     ch_db: str
-    # MySQL (OLTP users source)
     mysql_user: str
     mysql_password: str
     mysql_root_password: str
     mysql_db: str
-    # Kafka
     kafka_bootstrap_host: str
     kafka_bootstrap_internal: str
     kafka_topic: str
-    # Compose
     compose_project: str
 
     @property
@@ -70,7 +53,7 @@ class Settings:
         return f"http://{self.ch_host}:{self.ch_port}/"
 
     def render_env(self) -> dict[str, str]:
-        """Values exposed to ``${VAR}`` substitution in SQL/connector files."""
+        """Values used to fill ${VAR} placeholders in SQL/connector files."""
         return {
             "MYSQL_USER": self.mysql_user,
             "MYSQL_PASSWORD": self.mysql_password,

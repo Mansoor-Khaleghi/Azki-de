@@ -1,13 +1,4 @@
-"""Kafka producer (Part 1).
-
-Streams user_events.csv into the ``user_events`` topic as JSONEachRow, keyed by
-user_id so all events for a user land on the same partition (preserving
-per-user ordering). ClickHouse's Kafka table engine consumes this downstream.
-
-``confluent_kafka`` is imported lazily inside ``stream()`` so the pure
-``build_event`` transform stays importable (and unit-testable) without the
-native librdkafka dependency.
-"""
+"""Stream user_events.csv into Kafka as JSONEachRow, keyed by user_id."""
 from __future__ import annotations
 
 import csv
@@ -17,11 +8,7 @@ import time
 
 
 def build_event(row: dict) -> dict:
-    """Cast one CSV row to the JSON schema ClickHouse expects.
-
-    Empty ``premium_amount`` -> ``None`` so the consumer decides policy rather
-    than silently coercing missing money to 0.
-    """
+    """Cast a CSV row to the event schema; empty premium_amount -> None."""
     premium = (row.get("premium_amount") or "").strip()
     return {
         "event_time": row["event_time"],
@@ -35,8 +22,8 @@ def build_event(row: dict) -> dict:
 
 def stream(bootstrap: str, topic: str, file: str,
            rate: float = 0.0, limit: int = 0) -> tuple[int, int, int]:
-    """Produce events to Kafka. Returns (sent, delivered, failed)."""
-    from confluent_kafka import Producer  # lazy: keeps build_event dep-free
+    """Produce events to Kafka; return (sent, delivered, failed)."""
+    from confluent_kafka import Producer
 
     producer = Producer({
         "bootstrap.servers": bootstrap,
@@ -44,7 +31,7 @@ def stream(bootstrap: str, topic: str, file: str,
         "batch.num.messages": 10000,
         "compression.type": "lz4",
         "acks": "all",
-        "enable.idempotence": True,   # exactly-once semantics into the topic
+        "enable.idempotence": True,
     })
 
     delivered = failed = sent = 0
@@ -92,10 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--bootstrap", default=s.kafka_bootstrap_host)
     ap.add_argument("--topic", default=s.kafka_topic)
     ap.add_argument("--file", default="data/user_events.csv")
-    ap.add_argument("--rate", type=float, default=0.0,
-                    help="max msgs/sec (0 = unlimited)")
-    ap.add_argument("--limit", type=int, default=0,
-                    help="stop after N rows (0 = all); handy for smoke tests")
+    ap.add_argument("--rate", type=float, default=0.0)
+    ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args(argv)
     _, _, failed = stream(args.bootstrap, args.topic, args.file,
                           args.rate, args.limit)

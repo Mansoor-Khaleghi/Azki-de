@@ -2,8 +2,8 @@
 --  Part 3 — Data quality checks (ClickHouse SQL).
 --
 --  Each query returns a single row with: check_name, status ('PASS'/'FAIL'),
---  and a metric. run_quality_checks.py executes them and exits non-zero on
---  any FAIL, so this doubles as a CI / Airflow gate.
+--  and a metric. `azki dq` executes them and exits non-zero on any FAIL, so
+--  this doubles as a CI / Airflow gate.
 -- =====================================================================
 
 -- 1) COMPLETENESS — did everything we produced actually land?

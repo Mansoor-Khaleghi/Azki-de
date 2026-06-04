@@ -7,7 +7,6 @@ from azki import cli
 from azki.config import load_settings
 
 EXPECTED_COMMANDS = {
-    "check-data", "up", "up-bonus", "orchestrate", "down", "clean", "logs",
     "init", "seed", "produce", "verify", "dq", "reconcile", "apply-opt",
     "apply-gov", "connect-register", "backfill", "demo",
 }

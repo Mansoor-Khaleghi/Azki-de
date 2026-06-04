@@ -1,14 +1,9 @@
-"""Synthetic order generator (Part 2).
+"""Synthetic order tables generated from purchase events.
 
-The task says: "Assume order details come from 5 different production tables."
-The dataset doesn't ship them, so we synthesize realistic order rows keyed to
-the actual purchase events, so the denormalization MV is demonstrably correct
-(every purchase joins to exactly one product order + one financial row).
-
-For each ``purchase`` event in user_events.csv we emit:
-  * one row in ONE of the four product tables (deterministic by hash), carrying
-    the event's premium and session, so (user_id, session_id) joins back; and
-  * one matching row in financial_order (same order_id).
+The 5 order tables aren't shipped with the dataset, so we build them from the
+purchase events: each purchase yields one row in one of the four product tables
+(chosen deterministically) plus one matching row in financial_order, keyed by
+order_id and linkable to the event via (user_id, session_id).
 """
 from __future__ import annotations
 
@@ -25,7 +20,7 @@ VEHICLE_BRANDS = ["Saipa", "IranKhodro", "Toyota", "Hyundai", "Kia", "Renault"]
 PLAN_TIERS = ["bronze", "silver", "gold", "platinum"]
 PROPERTY_TYPES = ["residential", "commercial"]
 PAYMENT_METHODS = ["gateway", "wallet", "installment"]
-PAYMENT_STATUS = ["paid", "paid", "paid", "pending", "failed"]  # mostly paid
+PAYMENT_STATUS = ["paid", "paid", "paid", "pending", "failed"]
 
 HEADERS = {
     "third": ["order_id", "user_id", "session_id", "premium", "created_at",
@@ -43,17 +38,12 @@ HEADERS = {
 
 
 def stable_line(user_id: str, session_id: str) -> str:
-    """Deterministic product-line assignment so reruns are reproducible."""
     h = hashlib.md5(f"{user_id}:{session_id}".encode()).hexdigest()
     return PRODUCT_LINES[int(h, 16) % len(PRODUCT_LINES)]
 
 
 def generate_orders(events_path: str, out_dir: str, seed: int = 42) -> dict[str, int]:
-    """Write the 5 order CSVs from purchase events. Returns per-table row counts.
-
-    Pure (no DB) so it is unit-testable; the CLI then loads the CSVs into
-    ClickHouse. Deterministic given ``seed`` + the same input.
-    """
+    """Write the 5 order CSVs from purchase events; return per-table row counts."""
     rng = random.Random(seed)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -99,7 +89,6 @@ def generate_orders(events_path: str, out_dir: str, seed: int = 42) -> dict[str,
                                               round(premium * rng.uniform(20, 60), 2)])
                 counts[line] += 1
 
-                # financial_order: shared across all lines, keyed by order_id
                 discount = round(premium * rng.uniform(0, 0.15), 2)
                 tax = round((premium - discount) * 0.09, 2)
                 net = round(premium - discount + tax, 2)
@@ -124,8 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args(argv)
     counts = generate_orders(args.events, args.out, args.seed)
-    print(f"Generated {counts['financial']} orders across {len(PRODUCT_LINES)} "
-          f"product tables + financial_order -> {args.out}/")
+    print(f"Generated {counts['financial']} orders -> {args.out}/")
     print("  " + ", ".join(f"{k}={v}" for k, v in counts.items()))
     return 0
 

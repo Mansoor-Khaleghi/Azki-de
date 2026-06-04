@@ -3,8 +3,8 @@
 --
 --  Four product order tables (one per insurance line) + one financial
 --  table. In production these would be Debezium CDC topics off MySQL;
---  here they are MergeTree tables seeded by ingestion/generate_orders.py
---  from the purchase events, so the denormalization MV is demonstrable.
+--  here they are MergeTree tables seeded by `azki seed` from the purchase
+--  events, so the denormalization MV is demonstrable.
 --
 --  Each product line has line-specific attributes (the reason they are
 --  separate tables); they share the order grain: one row per purchase,

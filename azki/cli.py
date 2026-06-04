@@ -1,22 +1,20 @@
-"""``python -m azki <command>`` — the single operational surface.
+"""``python -m azki <command>`` — pipeline operations against the running stack.
 
-Replaces the old Makefile. Every command reads connection settings/credentials
-from ``.env`` (see ``azki.config``); ClickHouse is driven over HTTP so the same
-commands work from the host or inside a container.
+Start the stack with ``docker compose up -d``; these commands then build the
+schema and move data through it. All credentials come from .env.
 
-Common flows:
-    python -m azki demo            # up -> init -> seed -> produce -> reconcile -> verify
-    python -m azki up              # start core stack (kafka, mysql, clickhouse)
-    python -m azki init            # create dictionary, Kafka source, MVs, tables
-    python -m azki seed            # generate + load synthetic order tables
-    python -m azki produce         # stream user_events.csv into Kafka
-    python -m azki verify          # row counts + sample aggregates
-    python -m azki dq              # run the data-quality gate
+    python -m azki demo      # init -> seed -> produce -> reconcile -> verify
+    python -m azki init      # create dictionary, Kafka source, MVs, tables
+    python -m azki seed      # generate + load synthetic order tables
+    python -m azki produce   # stream user_events.csv into Kafka
+    python -m azki verify    # row counts + sample aggregates
+    python -m azki dq        # data-quality gate
 """
 from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from . import orders, producer, quality
@@ -24,8 +22,6 @@ from .clickhouse import Client, render
 from .compose import REPO_ROOT, check_data, compose
 from .config import Settings, load_settings
 
-# ── SQL applied by `init`, in order. Part 1 (dictionary -> Kafka source ->
-#    enrichment MV -> aggregates) then Part 2 (order tables -> denorm MV). ──
 INIT_SQL = [
     "clickhouse/part1/01-users-dictionary.sql",
     "clickhouse/part1/02-kafka-source.sql",
@@ -43,7 +39,6 @@ def _read(path: str) -> str:
 
 
 def _apply_sql(client: Client, path: str, env: dict[str, str]) -> None:
-    """Render ${VAR} placeholders from .env, then run the script over HTTP."""
     n = client.execute_script(render(_read(path), env))
     print(f"  applied {path} ({n} statements)")
 
@@ -53,47 +48,10 @@ def _expected_rows(events="data/user_events.csv") -> int:
     if not p.exists():
         return 20000
     with p.open() as fh:
-        return max(sum(1 for _ in fh) - 1, 0)  # minus header
+        return max(sum(1 for _ in fh) - 1, 0)
 
 
 # ─────────────────────────── commands ───────────────────────────
-
-def cmd_check_data(s, a):
-    check_data()
-
-
-def cmd_up(s, a):
-    check_data()
-    compose("up", "-d", "kafka", "mysql", "clickhouse")
-    print("Waiting for ClickHouse to be ready...")
-    if Client(s).wait_until_ready():
-        print("ClickHouse ready.")
-    else:
-        print("WARNING: ClickHouse not ready in time.", file=sys.stderr)
-    compose("ps")
-
-
-def cmd_up_bonus(s, a):
-    check_data()
-    compose("up", "-d")
-
-
-def cmd_orchestrate(s, a):
-    compose("--profile", "orchestration", "up", "-d", "prefect")
-    print("Prefect UI -> http://localhost:4200 (serving azki-monitoring every 5 min)")
-
-
-def cmd_down(s, a):
-    compose("down")
-
-
-def cmd_clean(s, a):
-    compose("down", "-v")
-
-
-def cmd_logs(s, a):
-    compose("logs", "-f", "clickhouse", "kafka", check=False)
-
 
 def cmd_init(s, a):
     client = Client(s)
@@ -106,13 +64,11 @@ def cmd_init(s, a):
 def cmd_seed(s, a):
     out = REPO_ROOT / "data" / "orders"
     counts = orders.generate_orders(str(REPO_ROOT / a.events), str(out), a.seed)
-    print(f"generated {counts['financial']} orders: "
-          + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    print("generated orders: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
     client = Client(s)
     for t in ORDER_TABLES:
-        csv_path = out / f"{t}_order.csv"
         print(f"loading {t}...")
-        client.insert_csv(f"{s.ch_db}.{t}_order", str(csv_path))
+        client.insert_csv(f"{s.ch_db}.{t}_order", str(out / f"{t}_order.csv"))
 
 
 def cmd_produce(s, a):
@@ -152,7 +108,7 @@ def cmd_verify(s, a):
         print(f"\n## {title}:")
         try:
             print(client.query(sql, fmt="PrettyCompact"))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"(unavailable: {e})")
     print("\n============================================================")
 
@@ -179,7 +135,6 @@ def cmd_apply_gov(s, a):
 
 
 def cmd_connect_register(s, a):
-    """Register Debezium source + ClickHouse sink, injecting creds from .env."""
     import urllib.request
     env = s.render_env()
     for path in CONNECTORS:
@@ -190,7 +145,7 @@ def cmd_connect_register(s, a):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 print(f"registered {Path(path).name}: {resp.status}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"failed to register {Path(path).name}: {e}", file=sys.stderr)
 
 
@@ -203,21 +158,25 @@ def cmd_backfill(s, a):
 
 
 def cmd_demo(s, a):
-    cmd_up(s, a)
+    check_data()
+    client = Client(s)
+    print("Waiting for ClickHouse...")
+    if not client.wait_until_ready():
+        print("ClickHouse not reachable — is `docker compose up -d` running?",
+              file=sys.stderr)
+        raise SystemExit(1)
     cmd_init(s, a)
     cmd_seed(s, a)
     cmd_produce(s, a)
     print("Waiting for ClickHouse to consume the topic...")
-    client = Client(s)
     expected = _expected_rows()
-    import time
     for _ in range(30):
         n = int(client.query(f"SELECT count() FROM {s.ch_db}.events_enriched") or 0)
         if n >= expected:
             print(f"consumed {n} events")
             break
         time.sleep(2)
-    cmd_reconcile(s, a)   # gap-fill purchases the streaming MV missed
+    cmd_reconcile(s, a)
     cmd_verify(s, a)
 
 
@@ -234,13 +193,6 @@ def build_parser(settings: Settings | None = None) -> argparse.ArgumentParser:
         sp.set_defaults(func=func)
         return sp
 
-    add("check-data", cmd_check_data, "fail fast if the dataset is missing")
-    add("up", cmd_up, "start core stack (kafka, mysql, clickhouse)")
-    add("up-bonus", cmd_up_bonus, "start full stack incl. Schema Registry, Connect, UI")
-    add("orchestrate", cmd_orchestrate, "start Prefect server + UI + scheduled flow")
-    add("down", cmd_down, "stop containers (keep volumes)")
-    add("clean", cmd_clean, "stop and remove volumes (full reset)")
-    add("logs", cmd_logs, "tail clickhouse + kafka logs")
     add("init", cmd_init, "create dictionary, Kafka source, MVs, tables")
 
     sp = add("seed", cmd_seed, "generate + load synthetic order tables (Part 2)")
@@ -257,8 +209,7 @@ def build_parser(settings: Settings | None = None) -> argparse.ArgumentParser:
     add("verify", cmd_verify, "show row counts + sample aggregates")
 
     sp = add("dq", cmd_dq, "run the data-quality gate")
-    sp.add_argument("--expected", type=int, default=None,
-                    help="expected source rows (default: count data/user_events.csv)")
+    sp.add_argument("--expected", type=int, default=None)
     sp.add_argument("--sql", default="quality/dq_checks.sql")
 
     add("reconcile", cmd_reconcile, "gap-fill fact_purchases for late orders")
@@ -270,7 +221,7 @@ def build_parser(settings: Settings | None = None) -> argparse.ArgumentParser:
     sp.add_argument("start", help="inclusive YYYY-MM-DD")
     sp.add_argument("end", help="inclusive YYYY-MM-DD")
 
-    sp = add("demo", cmd_demo, "full happy path: up -> init -> seed -> produce -> verify")
+    sp = add("demo", cmd_demo, "init -> seed -> produce -> reconcile -> verify")
     sp.add_argument("--events", default="data/user_events.csv")
     sp.add_argument("--seed", type=int, default=42)
     sp.add_argument("--bootstrap", default=s.kafka_bootstrap_host)

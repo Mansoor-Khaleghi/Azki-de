@@ -1,26 +1,14 @@
-# =====================================================================
-#  Azki DE Task — Python dependencies (direct, loosely pinned)
+# Python dependencies for running the pipeline from the host.
+# The azki CLI itself is pure stdlib; only the producer needs a package.
 #
-#  The `azki` CLI itself is pure stdlib (argparse + urllib) and needs NOTHING
-#  here. These are only for the optional building blocks:
-#
-#    * confluent-kafka : `azki produce` (stream events into Kafka)
-#    * prefect         : orchestration/flows.py (schedules, retries, UI)
-#    * pyspark         : spark/ backfill job + local validation
-#    * pytest          : the test suite (dev only)
-#
-#  Reproducible, fully-pinned versions live in requirements.lock.
-#  Install:  pip install -r requirements.txt     (or requirements.lock)
-# =====================================================================
+# Pinned versions: requirements.lock
 
-# --- ingestion ---
+# producer (azki produce)
 confluent-kafka>=2.6
 
-# --- orchestration ---
-prefect>=3.0
-
-# --- backfill (Spark) ---
-pyspark>=3.5,<3.6
-
-# --- dev / tests ---
+# tests
 pytest>=8.0
+
+# Optional, only if you run these on the host instead of in their containers:
+#   prefect>=3.0      # orchestration/flows.py (otherwise the `prefect` service)
+#   pyspark>=3.5      # spark/validate_backfill.py (otherwise the `spark` service)

@@ -3,8 +3,8 @@
 ## 1. Overview
 
 This project implements the three-part task end-to-end on a reproducible local
-stack — one command surface, `python -m azki demo` (the CLI replaces the old
-Makefile; every command reads its credentials from `.env`):
+stack: `docker compose up -d` brings up the services, and `python -m azki demo`
+runs the pipeline through them. Every command reads its credentials from `.env`:
 
 1. **Ingestion & modeling** — `user_events.csv` is streamed through **Kafka**,
    joined against the **MySQL `users`** table, and **aggregated into
@@ -127,9 +127,9 @@ Prefect flows — `ingest` (produce → wait → reconcile → DQ), `monitoring`
 **retries** and a DQ gate that fails the run on any `FAIL`. Tasks drive the
 canonical `azki` CLI / package, so there is no duplicated logic. The flows are
 connection-agnostic (settings from `.env`/env: `CH_HOST`/`KAFKA_BOOTSTRAP`), so
-the **same code runs in compose** (`azki orchestrate` → server + UI + scheduled
-flow on the compose network) or on the host for dev. The whole project therefore
-comes up from scratch via `docker compose` alone.
+the **same code runs in compose** (`docker compose --profile orchestration up -d
+prefect` → server + UI + scheduled flow on the compose network) or on the host
+for dev. The whole project therefore comes up from scratch via `docker compose`.
 
 ## 5. Verified results (actual local run)
 
@@ -168,17 +168,16 @@ and the bloom-filter skip indexes were confirmed active, and the Prefect
 ## 7. Operability — CLI, configuration & tests
 
 - **One command surface.** A small stdlib-only Python CLI (`python -m azki`)
-  replaces the Makefile. Each former target is now a subcommand (`up`, `init`,
-  `seed`, `produce`, `verify`, `dq`, `reconcile`, `apply-opt`, `apply-gov`,
-  `backfill`, `demo`). ClickHouse is driven over its HTTP interface, so every
-  command runs identically on the host, in CI, or inside a container — no
-  `docker exec`, no shell-quoting fragility.
-- **Secrets from `.env` only.** No password is hardcoded anywhere in the code.
-  Connection settings load from the environment, falling back to the committed
-  `.env` (throwaway local-demo creds). SQL/connector files that *must* embed a
-  credential (the MySQL dictionary source, the Connect configs) carry
-  `${VAR}` placeholders that the CLI fills at apply time. In production the same
-  env vars come from a secret manager — nothing changes in the code.
+  runs the data steps (`init`, `seed`, `produce`, `verify`, `dq`, `reconcile`,
+  `apply-opt`, `apply-gov`, `backfill`, `demo`) against the Compose stack.
+  ClickHouse is driven over its HTTP interface, so every command runs
+  identically on the host, in CI, or inside a container.
+- **Secrets from `.env` only.** No password is hardcoded in the code. Connection
+  settings load from the environment, falling back to the committed `.env`
+  (local-demo creds). SQL/connector files that must embed a credential (the
+  MySQL dictionary source, the Connect configs) carry `${VAR}` placeholders the
+  CLI fills at apply time. In production the same env vars come from a secret
+  manager.
 - **Tests.** A `pytest` suite covers the pure logic without needing the stack:
   config precedence (`env > .env > default`), order generation
   (determinism, purchase→order→financial join-completeness, reproducible seed),

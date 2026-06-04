@@ -1,8 +1,3 @@
-"""Azki Senior DE Task — pipeline package + CLI.
-
-A single command surface (``python -m azki <command>``) replaces the old
-Makefile. All credentials/hosts come from ``.env`` (see ``azki.config``); no
-secret is hardcoded in the codebase.
-"""
+"""Azki DE pipeline package and CLI (``python -m azki``)."""
 
 __version__ = "1.0.0"
