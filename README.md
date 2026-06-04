@@ -232,13 +232,45 @@ gives a clean reload). `reconcile` is idempotent by design.
 
 ---
 
-## 5. How it maps to the task
+## 5. Task coverage
 
-| Part | Where |
+Every requirement from the task, mapped to where it lives (✅ = done).
+
+**Part 1 — Data modeling & ingestion**
+
+| Requirement | Where |
 |---|---|
-| **Part 1** — ingest events from Kafka, join MySQL users, aggregate into ClickHouse | `azki produce` + `clickhouse/part1/` + `connect/` |
-| **Part 2** — denormalized purchase table via MVs, performance, governance | `clickhouse/part2/` (+ `azki seed/reconcile/apply-opt/apply-gov`) |
-| **Part 3** — data-quality plan + monitoring, Spark backfill (bonus) | `quality/` + `spark/` + `orchestration/` |
+| ✅ Read events from **Kafka** | `clickhouse/part1/02-kafka-source.sql` (Kafka engine) + `azki produce` |
+| ✅ Join with the **MySQL `users`** table | `01-users-dictionary.sql` (`users_dict` ← MySQL) + `03-events-enriched.sql` (`dictGet`) |
+| ✅ Load **aggregates** into ClickHouse (avg/sum/count) | `04-aggregates.sql` → `events_agg_daily` (count / uniq / sum / avg) |
+| ✅ *Bonus:* Kafka cluster via Compose + tools + Connect configs | `docker-compose.yml` (Kafka/Schema Registry/Connect/Kafka-UI) + `connect/*.json` (`azki connect-register`) |
+
+**Part 2 — Query performance & data governance**
+
+| Requirement | Where |
+|---|---|
+| ✅ Denormalized table on `event_type='purchase'` via **materialized views** | `11-denormalized-purchases.sql` → `mv_fact_purchases` → `fact_purchases` |
+| ✅ Order details from **5 tables** (third/body/medical/fire + `financial_order`) | `10-order-tables.sql` (+ `azki seed`) |
+| ✅ **Multiple joins & unions** | `product_orders_all` (UNION of 4) `INNER JOIN` events `LEFT JOIN financial_order` |
+| ✅ **Performance optimizations** | `12-optimizations.sql`: projection, bloom skip-indexes, LowCardinality, partitioning, codecs, TTL (`azki apply-opt`) |
+| ✅ **Governance / access control** | `13-governance.sql`: RBAC roles, masked view, row policy, quotas, constraints (`azki apply-gov`) |
+
+**Part 3 — Data quality & monitoring**
+
+| Requirement | Where |
+|---|---|
+| ✅ Plan for **sync & delay** | `quality/DATA_QUALITY.md §1` + consumer-lag / freshness / ingestion-lag checks |
+| ✅ **Missing events** | `§2` + row-count parity, referential integrity, offset-continuity gap detection |
+| ✅ **Schema drift** | `§3` + Schema Registry, error-stream → DLQ, DDL hashing |
+| ✅ **Load monitoring** | `§4` + `system.*` → Prometheus/Grafana; executable gate `azki dq` (`quality/dq_checks.sql`) |
+| ✅ *Bonus:* **Spark backfill** | `spark/backfill_job.py` → `events_enriched_backfill` (`azki backfill`) |
+
+**Deliverables:** code (`azki/`), SQL scripts (`clickhouse/`), architecture diagram
+([`docs/architecture.png`](docs/architecture.png) + [`docs/dataflow.png`](docs/dataflow.png)),
+and a technical report ([`docs/technical-report.md`](docs/technical-report.md)).
+
+Beyond the spec: idempotent late-order `reconcile`, Prefect orchestration, a
+`pytest` suite, ruff-clean code, and a from-zero run with no `pip install`.
 
 ---
 
