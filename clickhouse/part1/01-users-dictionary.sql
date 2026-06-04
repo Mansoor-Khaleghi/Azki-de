@@ -22,9 +22,9 @@ PRIMARY KEY user_id
 SOURCE(MYSQL(
     host 'mysql'
     port 3306
-    user 'azki'
-    password 'azkipw'
-    db 'azki'
+    user '${MYSQL_USER}'           -- filled from .env by `azki init`; no secret in repo
+    password '${MYSQL_PASSWORD}'
+    db '${MYSQL_DATABASE}'
     table 'users'
 ))
 LAYOUT(HASHED())

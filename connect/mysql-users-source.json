@@ -6,8 +6,8 @@
 
     "database.hostname": "mysql",
     "database.port": "3306",
-    "database.user": "azki",
-    "database.password": "azkipw",
+    "database.user": "${MYSQL_USER}",
+    "database.password": "${MYSQL_PASSWORD}",
     "database.server.id": "184054",
     "topic.prefix": "azki",
 

@@ -1,19 +1,18 @@
 # Orchestration (Prefect)
 
 A thin **Prefect** layer that turns the pipeline's manual steps into operable,
-schedulable, retrying flows. Tasks shell out to the canonical scripts/SQL
-(`produce_events.py`, `14-denorm-reconcile.sql`, `run_quality_checks.py`,
-`validate_backfill.py`) — **no logic is duplicated**, so the orchestrator and
-the Makefile stay in sync.
+schedulable, retrying flows. Tasks drive the canonical `azki` CLI / package
+(`azki produce`, `azki reconcile`, `azki dq`, `validate_backfill.py`) —
+**no logic is duplicated**, so the orchestrator and the CLI stay in sync.
 
 The flows are **connection-agnostic** (ClickHouse over HTTP, Kafka bootstrap —
-both env-driven via `CH_HOST` / `KAFKA_BOOTSTRAP`), so the exact same code runs
-two ways:
+both from `.env`/env via `CH_HOST` / `KAFKA_BOOTSTRAP`), so the exact same code
+runs two ways:
 
-- **In compose** (default, zero local setup): `make orchestrate` starts the
+- **In compose** (default, zero local setup): `azki orchestrate` starts the
   `prefect` service — server + UI + the scheduled `monitoring` flow — talking to
   the stack over the compose network. UI at http://localhost:4200.
-- **On the host** (dev): `pip install -r orchestration/requirements.txt` then
+- **On the host** (dev): `pip install -r requirements.txt` then
   `python orchestration/flows.py ...` against `localhost`.
 
 ## Flows
@@ -33,7 +32,7 @@ Resilience: `produce_events` retries 3× (transient broker errors),
 **In compose (recommended):**
 
 ```bash
-make orchestrate          # docker compose --profile orchestration up -d prefect
+python -m azki orchestrate   # docker compose --profile orchestration up -d prefect
 # -> Prefect server + UI at http://localhost:4200, serving the scheduled
 #    azki-monitoring flow (reconcile + DQ every 5 min).
 
@@ -44,7 +43,7 @@ docker exec azki-prefect python orchestration/flows.py monitoring
 **On the host (dev):**
 
 ```bash
-pip install -r orchestration/requirements.txt   # prefect>=3
+pip install -r requirements.txt                          # prefect>=3 (+ rest)
 python orchestration/flows.py monitoring                 # reconcile + DQ
 python orchestration/flows.py ingest                     # full cycle
 python orchestration/flows.py backfill 2025-10-01 2025-10-07

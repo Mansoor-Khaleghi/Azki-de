@@ -3,7 +3,8 @@
 ## 1. Overview
 
 This project implements the three-part task end-to-end on a reproducible local
-stack (`docker compose up` + `make demo`):
+stack — one command surface, `python -m azki demo` (the CLI replaces the old
+Makefile; every command reads its credentials from `.env`):
 
 1. **Ingestion & modeling** — `user_events.csv` is streamed through **Kafka**,
    joined against the **MySQL `users`** table, and **aggregated into
@@ -56,7 +57,7 @@ warehouse should remain a pure sink.
 
 ### Denormalized table
 The 5 production tables aren't shipped with the dataset, so they are modelled
-and synthesized (`ingestion/generate_orders.py`) keyed to the real purchase
+and synthesized (`azki/orders.py`, run via `azki seed`) keyed to the real purchase
 events. Each product line (`third`, `body`, `medical`, `fire`) is its own table
 because each carries line-specific attributes; `product_orders_all` is a `VIEW`
 that **UNION ALL**s them to a common grain with line-specific fields folded into
@@ -67,7 +68,7 @@ a `Map`. `mv_fact_purchases` fires on every `purchase` event in
 **Late-arriving orders.** An INNER-JOIN MV denormalizes at ingest time, so a
 purchase consumed *before* its order row exists would be dropped permanently.
 To guarantee completeness I pair the streaming MV with an idempotent
-reconciliation query (`14-denorm-reconcile.sql`, `make denorm-reconcile`) that
+reconciliation query (`14-denorm-reconcile.sql`, `azki reconcile`) that
 inserts only the purchases not yet present (guarded by `order_id`,
 `LIMIT 1 BY order_id`). The MV is the low-latency happy path; the reconciliation
 — run on a schedule — closes any gaps. This is the production-correct pattern
@@ -99,7 +100,7 @@ A layered plan (in-stream / at-rest / observability) in
 (consumer lag, freshness SLA), **missing events** (row-count parity, referential
 integrity, volume anomaly, gap detection), **schema drift** (Schema Registry,
 error-stream→DLQ, DDL hashing), and **load monitoring** (`system.*` tables →
-Prometheus/Grafana). The executable gate (`run_quality_checks.py` over
+Prometheus/Grafana). The executable gate (`azki dq` → `azki/quality.py` over
 `dq_checks.sql`) exits non-zero on failure for CI/Airflow.
 
 **Kafka lineage for precise checks.** Every enriched row persists its
@@ -123,12 +124,12 @@ ClickHouse **idempotently** (ReplacingMergeTree + optional partition-scoped
 [`orchestration/flows.py`](../orchestration/flows.py) wraps the pipeline as
 Prefect flows — `ingest` (produce → wait → reconcile → DQ), `monitoring`
 (reconcile + DQ on a 5-minute schedule), and `backfill` — with per-task
-**retries** and a DQ gate that fails the run on any `FAIL`. Tasks shell out to
-the canonical scripts/SQL, so there is no duplicated logic. The flows are
-connection-agnostic (`CH_HOST`/`KAFKA_BOOTSTRAP` env), so the **same code runs
-in compose** (`make orchestrate` → server + UI + scheduled flow on the compose
-network) or on the host for dev. The whole project therefore comes up from
-scratch via `docker compose` alone.
+**retries** and a DQ gate that fails the run on any `FAIL`. Tasks drive the
+canonical `azki` CLI / package, so there is no duplicated logic. The flows are
+connection-agnostic (settings from `.env`/env: `CH_HOST`/`KAFKA_BOOTSTRAP`), so
+the **same code runs in compose** (`azki orchestrate` → server + UI + scheduled
+flow on the compose network) or on the host for dev. The whole project therefore
+comes up from scratch via `docker compose` alone.
 
 ## 5. Verified results (actual local run)
 
@@ -144,7 +145,7 @@ The pipeline was run end-to-end on the provided dataset:
 | Offset continuity | 0 gaps (offsets 0–19,999) |
 | Ingestion lag | p95 6s, max 6s |
 
-Verified by a **clean clone + from-zero `make demo`** (not just in-place). The
+Verified by a **clean clone + from-zero `python -m azki demo`** (not just in-place). The
 single WARN is the genuine data issue: **15,108 non-purchase events carry a
 `premium_amount`**. Both the projection (`force_optimize_projection=1` succeeds)
 and the bloom-filter skip indexes were confirmed active, and the Prefect
@@ -163,3 +164,27 @@ and the bloom-filter skip indexes were confirmed active, and the Prefect
   and run the ingest/backfill cycles; next would be deploying them to a
   server+worker, adding schema-deploy flows, and shipping metrics to Grafana
   with alerting on lag/freshness/parts.
+
+## 7. Operability — CLI, configuration & tests
+
+- **One command surface.** A small stdlib-only Python CLI (`python -m azki`)
+  replaces the Makefile. Each former target is now a subcommand (`up`, `init`,
+  `seed`, `produce`, `verify`, `dq`, `reconcile`, `apply-opt`, `apply-gov`,
+  `backfill`, `demo`). ClickHouse is driven over its HTTP interface, so every
+  command runs identically on the host, in CI, or inside a container — no
+  `docker exec`, no shell-quoting fragility.
+- **Secrets from `.env` only.** No password is hardcoded anywhere in the code.
+  Connection settings load from the environment, falling back to the committed
+  `.env` (throwaway local-demo creds). SQL/connector files that *must* embed a
+  credential (the MySQL dictionary source, the Connect configs) carry
+  `${VAR}` placeholders that the CLI fills at apply time. In production the same
+  env vars come from a secret manager — nothing changes in the code.
+- **Tests.** A `pytest` suite covers the pure logic without needing the stack:
+  config precedence (`env > .env > default`), order generation
+  (determinism, purchase→order→financial join-completeness, reproducible seed),
+  the producer's type-casting transform, the DQ runner's pass/warn/fail
+  accounting, the SQL splitter + `${VAR}` renderer (incl. asserting the
+  dictionary SQL no longer contains a literal password), and the CLI parser. The
+  Spark `enrich_window` transform has its own tests, skipped when PySpark is
+  absent. `requirements.txt` (loose) + `requirements.lock` (pinned) live at the
+  repo root.

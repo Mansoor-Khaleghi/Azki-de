@@ -11,5 +11,5 @@ data/users.csv          # the MySQL "users" table
 data/user_events.csv    # the event stream replayed into Kafka
 ```
 
-`make seed-orders` will additionally generate `data/orders/` from the purchase
-events — those are also git-ignored.
+`python -m azki seed` will additionally generate `data/orders/` from the
+purchase events — those are also git-ignored.

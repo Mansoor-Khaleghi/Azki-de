@@ -8,9 +8,9 @@
 
     "hostname": "clickhouse",
     "port": "8123",
-    "database": "azki",
-    "username": "azki",
-    "password": "azkipw",
+    "database": "${CLICKHOUSE_DB}",
+    "username": "${CLICKHOUSE_USER}",
+    "password": "${CLICKHOUSE_PASSWORD}",
     "ssl": "false",
 
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",

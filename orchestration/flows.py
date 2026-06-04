@@ -2,11 +2,11 @@
 """
 Azki DE Task — Prefect orchestration layer.
 
-Wraps the pipeline's existing building blocks (producer, reconciliation, DQ
-gate, Spark backfill) as Prefect tasks/flows with retries and scheduling, so
-the whole thing is operable instead of a pile of manual `make` calls. Tasks
-shell out to the canonical scripts/SQL — single source of truth, no logic
-duplicated.
+Wraps the pipeline's building blocks (producer, reconciliation, DQ gate, Spark
+backfill) as Prefect tasks/flows with retries and scheduling, so the whole
+thing is operable instead of a pile of manual commands. Every task drives the
+canonical `azki` CLI / package — single source of truth, no logic duplicated
+and no credentials in this file (they come from .env via azki.config).
 
 Run standalone (no server needed):
     python orchestration/flows.py monitoring     # reconcile + DQ gate, once
@@ -20,41 +20,30 @@ import os
 import subprocess
 import sys
 import time
-import urllib.request
 
-from prefect import flow, task, get_run_logger
+# Make the repo-root `azki` package importable whether run from the host or
+# from inside the compose `prefect` container (cwd=/app).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── connection config (env-driven so the same flows run host-side OR inside
-#    the compose `prefect` container). Host defaults -> localhost; the
-#    container sets CH_HOST=clickhouse, KAFKA_BOOTSTRAP=kafka:9092. ──
-CH_HOST = os.environ.get("CH_HOST", "localhost")
-CH_PORT = os.environ.get("CH_PORT", "8123")
-CH_USER = os.environ.get("CH_USER", "azki")
-CH_PASS = os.environ.get("CH_PASSWORD", "azkipw")
-KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:29092")
-PYTHON = sys.executable
+from prefect import flow, task, get_run_logger  # noqa: E402
 
+from azki.clickhouse import Client  # noqa: E402
+from azki.config import load_settings  # noqa: E402
 
-def _run(cmd, **kw):
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+SETTINGS = load_settings()
+CLIENT = Client(SETTINGS)
+AZKI = [sys.executable, "-m", "azki"]
 
 
-def ch_query(sql: str) -> str:
-    """Run a ClickHouse query over HTTP (no docker exec — works anywhere)."""
-    req = urllib.request.Request(
-        f"http://{CH_HOST}:{CH_PORT}/", data=sql.encode(),
-        headers={"X-ClickHouse-User": CH_USER, "X-ClickHouse-Key": CH_PASS})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return resp.read().decode().strip()
+def _run(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True)
 
 
 @task(retries=3, retry_delay_seconds=10)
 def produce_events(limit: int = 0):
     """Stream user_events.csv into Kafka (retried on transient broker errors)."""
     log = get_run_logger()
-    cmd = [PYTHON, "ingestion/producer/produce_events.py",
-           "--bootstrap", KAFKA_BOOTSTRAP, "--topic", "user_events",
-           "--file", "data/user_events.csv"]
+    cmd = AZKI + ["produce"]
     if limit:
         cmd += ["--limit", str(limit)]
     r = _run(cmd)
@@ -71,7 +60,7 @@ def wait_for_consumption(expected: int = 20000, timeout_s: int = 120):
     deadline = time.monotonic() + timeout_s
     n = 0
     while time.monotonic() < deadline:
-        n = int(ch_query("SELECT count() FROM azki.events_enriched") or 0)
+        n = int(CLIENT.query(f"SELECT count() FROM {SETTINGS.ch_db}.events_enriched") or 0)
         if n >= expected:
             log.info(f"consumed {n} rows")
             return n
@@ -83,20 +72,18 @@ def wait_for_consumption(expected: int = 20000, timeout_s: int = 120):
 def reconcile_denorm():
     """Idempotent gap-fill of fact_purchases for late-arriving orders."""
     log = get_run_logger()
-    with open("clickhouse/part2/14-denorm-reconcile.sql") as f:
-        sql = f.read()
-    ch_query(sql)
-    n = ch_query("SELECT count() FROM azki.fact_purchases")
-    log.info(f"fact_purchases now {n}")
-    return n
+    r = _run(AZKI + ["reconcile"])
+    if r.returncode != 0:
+        raise RuntimeError(f"reconcile failed: {r.stderr[-500:]}")
+    log.info(r.stdout.strip())
+    return r.stdout.strip()
 
 
 @task
 def run_dq_gate(expected: int = 20000):
     """Run the data-quality gate; FAIL (non-zero exit) aborts the flow."""
     log = get_run_logger()
-    r = _run([PYTHON, "quality/run_quality_checks.py", "--expected", str(expected),
-              "--host", CH_HOST, "--port", CH_PORT])
+    r = _run(AZKI + ["dq", "--expected", str(expected)])
     log.info("\n" + r.stdout)
     if r.returncode != 0:
         raise RuntimeError("DATA QUALITY GATE FAILED")
@@ -107,7 +94,7 @@ def run_dq_gate(expected: int = 20000):
 def trigger_backfill(start: str, end: str):
     """Kick the Spark backfill for a date window (validation harness here)."""
     log = get_run_logger()
-    r = _run([PYTHON, "spark/validate_backfill.py", "--start", start, "--end", end])
+    r = _run([sys.executable, "spark/validate_backfill.py", "--start", start, "--end", end])
     log.info(r.stdout[-800:])
     if r.returncode != 0:
         raise RuntimeError(f"backfill failed: {r.stderr[-500:]}")

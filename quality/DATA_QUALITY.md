@@ -5,8 +5,8 @@ Checks are layered: **in-stream** (catch at ingest), **at-rest** (validate the
 warehouse), and **observability** (dashboards + alerts on the infrastructure).
 
 The executable subset lives in [`dq_checks.sql`](dq_checks.sql), run by
-[`run_quality_checks.py`](run_quality_checks.py) — a gate that exits non-zero on
-any `FAIL`, ready to drop into Airflow/CI.
+`python -m azki dq` (implemented in [`azki/quality.py`](../azki/quality.py)) — a
+gate that exits non-zero on any `FAIL`, ready to drop into Airflow/CI.
 
 ---
 
@@ -78,7 +78,7 @@ producer ──► Kafka ──► [Schema Registry contract]
                  ClickHouse Kafka engine  ── parse errors ──► DLQ table
                          │ MV (+dictGet join)
                          ▼
-                 events_enriched ──► run_quality_checks.py (gate, scheduled)
+                 events_enriched ──► azki dq  (gate, scheduled)
                          │ MVs                    │
                          ▼                        ▼
               fact_purchases / aggregates   Grafana dashboards + alerts

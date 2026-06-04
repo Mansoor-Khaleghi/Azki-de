@@ -6,18 +6,26 @@ the users dimension, de-duplicates on the natural key, and loads ClickHouse
 
 ## Run
 
-1. Create the target table:
+1. Create the target table (credentials come from `.env`, not the command line):
 
 ```bash
-docker exec -i azki-clickhouse clickhouse-client --user azki --password azkipw \
-  --multiquery < spark/backfill_target.sql
+python -c "from azki.config import load_settings; from azki.clickhouse import Client; \
+  import pathlib; Client(load_settings()).execute_script(pathlib.Path('spark/backfill_target.sql').read_text())"
 ```
 
-2. Submit the job (ClickHouse JDBC driver pulled via `--packages`):
+2. Submit the job. The simplest path is the CLI, which injects the ClickHouse
+   password from `.env` into the container (`-e CH_PASSWORD=...`):
 
 ```bash
-docker compose --profile spark run --rm spark \
-  /opt/spark/bin/spark-submit \
+python -m azki backfill 2025-10-01 2025-10-07
+```
+
+   …which is equivalent to the raw compose invocation (note: **no password on
+   the command line** — `backfill_job.py` reads `CH_PASSWORD` from the env):
+
+```bash
+docker compose --profile spark run --rm -e CH_PASSWORD="$CLICKHOUSE_PASSWORD" spark \
+  spark-submit \
     --packages com.clickhouse:clickhouse-jdbc:0.6.3,org.apache.httpcomponents.client5:httpclient5:5.2.1 \
     /opt/app/backfill_job.py \
     --start 2025-10-01 --end 2025-10-07 \
