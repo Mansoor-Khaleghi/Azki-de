@@ -12,9 +12,16 @@ _PLACEHOLDER = re.compile(r"\$\{(\w+)\}")
 
 
 def split_statements(sql_text: str) -> list[str]:
-    """Drop full-line ``--`` comments and split a script on ``;``."""
-    lines = [ln for ln in sql_text.splitlines() if not ln.lstrip().startswith("--")]
-    return [s.strip() for s in "\n".join(lines).split(";") if s.strip()]
+    """Strip ``--`` comments (full-line and trailing) and split on ``;``.
+
+    Assumes ``--`` never appears inside a string literal, which holds for the
+    SQL in this repo.
+    """
+    cleaned = []
+    for ln in sql_text.splitlines():
+        idx = ln.find("--")
+        cleaned.append(ln[:idx] if idx != -1 else ln)
+    return [s.strip() for s in "\n".join(cleaned).split(";") if s.strip()]
 
 
 def render(text: str, env: dict[str, str]) -> str:
@@ -34,12 +41,20 @@ class Client:
 
     def query(self, sql: str, params: dict | None = None,
               fmt: str | None = None, body: bytes | None = None) -> str:
+        # Always POST: GET over the ClickHouse HTTP interface is readonly, so
+        # DDL/DML must go via POST. The statement travels in the request body;
+        # when uploading data (INSERT ... FORMAT ...), the body is that data and
+        # the statement moves to the `query` URL parameter instead.
         q = dict(params or {})
-        q["query"] = sql
         if fmt:
             q["default_format"] = fmt
+        if body is None:
+            data = sql.encode()
+        else:
+            q["query"] = sql
+            data = body
         url = self.base + "?" + urllib.parse.urlencode(q)
-        req = urllib.request.Request(url, data=body, headers=self.auth)
+        req = urllib.request.Request(url, data=data, headers=self.auth)
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             return resp.read().decode().strip()
 

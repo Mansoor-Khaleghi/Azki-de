@@ -20,6 +20,12 @@ def test_split_statements_drops_empty_trailing():
     assert split_statements("SELECT 1;\n\n;  ") == ["SELECT 1"]
 
 
+def test_split_statements_strips_trailing_inline_comment():
+    # a comment after the final ';' must not become an empty statement
+    sql = "CREATE TABLE a (x Int);   -- trailing note\n-- footer\n"
+    assert split_statements(sql) == ["CREATE TABLE a (x Int)"]
+
+
 def test_render_substitutes_known_vars_and_keeps_unknown():
     text = "user '${MYSQL_USER}' pw '${MYSQL_PASSWORD}' keep '${NOPE}'"
     out = render(text, {"MYSQL_USER": "azki", "MYSQL_PASSWORD": "s3cr3t"})
@@ -52,6 +58,8 @@ def test_client_query_builds_authenticated_url(tmp_path):
     def fake_urlopen(req, timeout=None):
         captured["url"] = req.full_url
         captured["headers"] = req.headers
+        captured["data"] = req.data
+        captured["method"] = req.get_method()
         return FakeResp()
 
     with mock.patch("urllib.request.urlopen", fake_urlopen):
@@ -59,6 +67,9 @@ def test_client_query_builds_authenticated_url(tmp_path):
 
     assert out == "42"
     assert captured["url"].startswith("http://localhost:8123/?")
+    # POST with the statement in the body (GET would be readonly in ClickHouse)
+    assert captured["method"] == "POST"
+    assert captured["data"] == b"SELECT 1"
     # credentials travel as headers, never in the query string / argv
     assert captured["headers"]["X-clickhouse-user"] == "u"
     assert captured["headers"]["X-clickhouse-key"] == "pw"
