@@ -173,9 +173,10 @@ and the bloom-filter skip indexes were confirmed active, and the Prefect
 ## 7. Operability — CLI, configuration & tests
 
 - **One command surface.** A small stdlib-only Python CLI (`python -m azki`)
-  runs the data steps (`init`, `seed`, `produce`, `verify`, `dq`, `reconcile`,
-  `apply-opt`, `apply-gov`, `connect-register`, `backfill`, `demo`) against the
-  Compose stack.
+  runs the data steps (`init`, `reset`, `seed`, `produce`, `verify`, `dq`,
+  `reconcile`, `apply-opt`, `apply-gov`, `connect-register`, `backfill`, `demo`)
+  against the Compose stack. `demo` resets the data tables first, so it is
+  idempotent; `reconcile` is idempotent by `order_id`.
   ClickHouse is driven over its HTTP interface, so every command runs
   identically on the host, in CI, or inside a container.
 - **Secrets from `.env` only.** No password is hardcoded in the code. Connection

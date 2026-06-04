@@ -212,6 +212,7 @@ The deeper write-up is in [`docs/architecture.md`](docs/architecture.md) and
 | Command | What it does |
 |---|---|
 | `azki init` | Create the dictionary, Kafka source, MVs, and tables |
+| `azki reset` | Truncate the data tables (keep schema + `users_dict`) for a clean reload |
 | `azki seed` | Generate + load the 5 synthetic order tables (Part 2) |
 | `azki produce` | Stream `user_events.csv` into Kafka |
 | `azki verify` | Row counts + sample aggregates from ClickHouse |
@@ -220,10 +221,15 @@ The deeper write-up is in [`docs/architecture.md`](docs/architecture.md) and
 | `azki apply-opt` / `azki apply-gov` | Part 2 performance / governance SQL |
 | `azki connect-register` | Register the Debezium + ClickHouse Connect connectors |
 | `azki backfill START END` | Run the Spark backfill for a date window |
-| `azki demo` | Full happy path: init → seed → produce → reconcile → verify |
+| `azki demo` | Full happy path: init → reset → seed → produce → reconcile → verify |
 
 Run `python -m azki <command> --help` for per-command flags. All commands read
 connection settings/credentials from `.env`.
+
+`demo` resets the data tables first, so it's **idempotent** — re-running it on a
+persisted stack always lands exactly 20,000 events / 4,892 purchases (ingestion
+is at-least-once, so `produce`/`seed` on their own append; `reset` or `demo`
+gives a clean reload). `reconcile` is idempotent by design.
 
 ---
 

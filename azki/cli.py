@@ -30,6 +30,14 @@ INIT_SQL = [
     "clickhouse/part2/11-denormalized-purchases.sql",
 ]
 ORDER_TABLES = ["third", "body", "medical", "fire", "financial"]
+# Data tables truncated by `reset` / at the start of `demo` so the happy path is
+# idempotent (re-running yields the same counts). The schema, the Kafka source,
+# and the MySQL-backed users_dict are left intact.
+DATA_TABLES = [
+    "events_enriched", "events_agg_daily", "fact_purchases",
+    *(f"{t}_order" for t in ORDER_TABLES),
+    "events_enriched_backfill", "user_events",
+]
 
 
 def _read(path: str) -> str:
@@ -67,6 +75,18 @@ def cmd_seed(s, a):
     for t in ORDER_TABLES:
         print(f"loading {t}...")
         client.insert_csv(f"{s.ch_db}.{t}_order", str(out / f"{t}_order.csv"))
+
+
+def cmd_reset(s, a):
+    """Empty the data tables (keep schema + users_dict) so a reload is clean.
+
+    Ingestion is at-least-once, so replaying produce/seed onto persisted volumes
+    appends duplicates; this gives a deterministic starting point.
+    """
+    client = Client(s)
+    for t in DATA_TABLES:
+        client.query(f"TRUNCATE TABLE IF EXISTS {s.ch_db}.{t}")
+    print(f"reset {len(DATA_TABLES)} data tables (schema + users_dict kept)")
 
 
 def cmd_produce(s, a):
@@ -220,6 +240,7 @@ def cmd_demo(s, a):
               file=sys.stderr)
         raise SystemExit(1)
     cmd_init(s, a)
+    cmd_reset(s, a)   # idempotent: start from empty data tables every run
     cmd_seed(s, a)
     cmd_produce(s, a)
     print("Waiting for ClickHouse to consume the topic...")
@@ -248,6 +269,7 @@ def build_parser(settings: Settings | None = None) -> argparse.ArgumentParser:
         return sp
 
     add("init", cmd_init, "create dictionary, Kafka source, MVs, tables")
+    add("reset", cmd_reset, "truncate data tables (keep schema + users_dict)")
 
     sp = add("seed", cmd_seed, "generate + load synthetic order tables (Part 2)")
     sp.add_argument("--events", default="data/user_events.csv")
