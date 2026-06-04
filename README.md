@@ -126,15 +126,19 @@ python -m azki apply-gov
 
 ## 3. System design
 
-![Azki pipeline system design](docs/architecture.png)
+**Topology** — the components and how they connect. The numbered steps ①–⑤ match
+the five steps in [§2](#2-the-big-picture-in-plain-terms):
 
-The numbered steps ①–⑤ above match the five steps in [§2](#2-the-big-picture-in-plain-terms).
-If the image doesn't render in your Markdown viewer, open it directly:
-[`docs/architecture.png`](docs/architecture.png) (or the vector source
-[`docs/architecture.svg`](docs/architecture.svg)). For a step-by-step view of how
-data moves through the pipeline, see the data-flow diagram
-[`docs/dataflow.png`](docs/dataflow.png) (detailed in
-[`docs/architecture.md`](docs/architecture.md)).
+![Azki pipeline topology](docs/architecture.png)
+
+**Data flow** — how a single event travels through the pipeline, plus the
+late-order reconcile and Spark backfill side-flows:
+
+![Azki pipeline data flow](docs/dataflow.png)
+
+If the images don't render in your Markdown viewer, open them directly under
+[`docs/`](docs/) (`architecture.png` / `dataflow.png`, with `.svg` vector
+sources); both are also embedded in [`docs/architecture.md`](docs/architecture.md).
 
 <details>
 <summary>Same diagram as Mermaid source (renders on GitHub)</summary>

@@ -1,27 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7b"/>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c8a99"/>
     </marker>
     <style>
-      .hdr{rx:8;stroke-width:1.6;}
+      .hdr{rx:8;stroke-width:1.3;}
       .src{fill:#fde9d4;stroke:#e0a96d;}
       .kafka{fill:#e7ddf6;stroke:#9b7bd0;}
       .ch{fill:#d8ecf9;stroke:#6aa9d6;}
       .out{fill:#fbe0e6;stroke:#d98aa0;}
-      .hname{font-size:13px;fill:#11202e;font-weight:700;}
-      .hsub{font-size:10.5px;fill:#3c4a59;}
-      .life{stroke:#aab6c4;stroke-width:1.4;stroke-dasharray:4 4;}
-      .msg{stroke:#3f5060;stroke-width:1.9;fill:none;}
-      /* white halo so labels stay legible where they cross lifelines/arrows */
-      .mlbl{font-size:12.5px;fill:#0f1d2a;font-weight:600;
-            paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round;}
-      .self{stroke:#3f8fc4;stroke-width:2;fill:none;}
-      .badge{fill:#22303d;}
-      .bnum{fill:#fff;font-size:11px;font-weight:700;}
-      .title{fill:#1b2733;font-size:15px;font-weight:700;}
-      .note{fill:#f4f7d8;stroke:#b6bd66;stroke-width:1.4;rx:8;}
-      .ntxt{font-size:11.5px;fill:#33381a;}
+      .hname{font-size:12.5px;fill:#1f2a36;font-weight:600;}
+      .hsub{font-size:10px;fill:#6b7886;}
+      .life{stroke:#cfd8e1;stroke-width:1.2;stroke-dasharray:4 4;}
+      .msg{stroke:#7c8a99;stroke-width:1.4;fill:none;}
+      /* subtle white halo keeps labels legible where they cross lifelines */
+      .mlbl{font-size:12px;fill:#2a3744;
+            paint-order:stroke;stroke:#ffffff;stroke-width:2px;stroke-linejoin:round;}
+      .self{stroke:#9cc0db;stroke-width:1.4;fill:none;}
+      .badge{fill:#5f6e7d;}
+      .bnum{fill:#fff;font-size:10px;font-weight:700;}
+      .title{fill:#3a4654;font-size:14px;font-weight:600;}
+      .note{fill:#f7f9fc;stroke:#d4dde6;stroke-width:1.2;rx:8;}
+      .ntxt{font-size:11px;fill:#4a5663;}
     </style>
   </defs>
 
