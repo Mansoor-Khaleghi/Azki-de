@@ -21,6 +21,8 @@
     </style>
   </defs>
 
+  <rect x="0" y="0" width="1320" height="560" fill="#ffffff"/>
+
   <text class="title" x="40" y="34">Azki pipeline — events &amp; users → query-ready ClickHouse tables</text>
 
   <!-- ============ STREAMING / INGEST ROW ============ -->

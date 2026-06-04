@@ -25,6 +25,8 @@
     </style>
   </defs>
 
+  <rect x="0" y="0" width="1180" height="560" fill="#ffffff"/>
+
   <text class="title" x="40" y="32">Data flow — one event's journey, end to end</text>
 
   <!-- ===== lifeline headers ===== -->
