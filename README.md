@@ -88,19 +88,14 @@ python -m azki apply-gov
 
 ## 2. The big picture (in plain terms)
 
+```text
+  Ingest       user_events.csv ─► Kafka topic ─► ClickHouse Kafka engine
+  Enrich       each event joined with users (dictGet on users_dict ← MySQL) ─► events_enriched
+  Aggregate    events_enriched ─► events_agg_daily (count / sum / avg) ─► dashboards
+  Denormalize  events_enriched + order tables (4 lines + financial) ─► fact_purchases ─► analytics / ML
 ```
-   ┌─────────────┐        ┌──────────┐        ┌────────────────────────────────┐
-   │  RAW INPUT  │        │ TRANSPORT│        │        WAREHOUSE (ClickHouse)  │
-   └─────────────┘        └──────────┘        └────────────────────────────────┘
 
- user_events.csv ─► producer ─► Kafka topic ─► Kafka engine ─► enrich ─► events_enriched
-                                  (user_events)                 ▲          │
-                                                                │          ├─► events_agg_daily   ─► dashboards
-   users.csv ─► MySQL ─────────► users_dict (lookup) ───────────┘          │   (count / sum / avg)
-                                                                           │
-                                4 product tables + financial ──► join ─────┴─► fact_purchases     ─► analytics / ML
-                                (third, body, medical, fire)                   (one wide row per purchase)
-```
+(The same flow is rendered as diagrams in [§3](#3-system-design).)
 
 1. **Events come in.** A producer reads `user_events.csv` and streams each row
    into a **Kafka** topic, keyed by `user_id` so one user's events stay in
